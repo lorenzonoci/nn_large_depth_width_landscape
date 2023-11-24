@@ -79,13 +79,13 @@ def get_model(arch, width, depth, args):
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
                       beta=args.beta, gamma_zero=args.gamma_zero, num_classes = 1000, img_dim = 224, norm=args.norm,
                       non_lin_first=True, layers_per_block=args.layers_per_block, sigma_last_layer_per_block=args.sigma_last_layer_per_block,
-                      init_stride=2, depth_scale_non_res_layers=args.depth_scale_non_res_layers)    
+                      init_stride=2, depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width)    
     elif arch == "conv" and args.dataset == "cifar10":
         net = ConvNet(width=width, n_blocks=depth,  gamma=args.gamma, 
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
                       beta=args.beta, gamma_zero=args.gamma_zero, norm=args.norm, layers_per_block=args.layers_per_block,
                       non_lin_first=True, sigma_last_layer_per_block=args.sigma_last_layer_per_block, init_stride=2,
-                      depth_scale_non_res_layers=args.depth_scale_non_res_layers)
+                      depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width)
         
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 

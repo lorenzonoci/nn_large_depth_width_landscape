@@ -44,10 +44,10 @@ def get_width_scaling(tensor, nonlinearity='linear', a=1):
 
 
 class ScaledLayer(nn.Module):
-    def __init__(self, layer, sigma_init=1.0, depth_scale=1.0, gamma=1.0, requires_grad=True, nonlinearity='linear'):
+    def __init__(self, layer, sigma_init=1.0, depth_scale=1.0, gamma=1.0, requires_grad=True, nonlinearity='linear', base_width=1.0):
         super().__init__()
         self.layer = layer
-        self.scaling = get_width_scaling(layer.weight, nonlinearity=nonlinearity) * depth_scale
+        self.scaling = get_width_scaling(layer.weight, nonlinearity=nonlinearity) * depth_scale * base_width
         self.std_init = sigma_init
         self.gamma = gamma
         self.reset_parameters()

@@ -14,6 +14,7 @@ from metrics import register_activation_hooks
 
 
 wandb_project_name = 'optimize_depth_scale_arch'
+wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
     return "model_{}/optimizer{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}".format(
@@ -54,6 +55,8 @@ if __name__ == '__main__':
                          help='set to zero to use an MLP without skip connections')
     parser.add_argument('--beta', type=float, default=1,
                          help='scaling factor for the residual branch. To use together with res_scaling parameter')
+    parser.add_argument('--base_width', type=float, default=1, 
+                        help='every 1/sqrt{N} factor is upscaled by constant equal to base_width')
     parser.add_argument('--gamma', type=str, default='none',
                          help='')
     parser.add_argument('--gamma_zero', type=float, default=1,
@@ -87,6 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_parametr', action='store_true')
     parser.add_argument('--use_relu_attn', action='store_true')
     parser.add_argument('--log_activations', action='store_true')
+    parser.add_argument('--no_wandb', action='store_false')
     args = parser.parse_args()
     
     
@@ -202,15 +206,16 @@ if __name__ == '__main__':
                                 if not os.path.isdir(args.save_path):
                                     os.mkdir(args.save_path)
 
-                                wandb.init(
-                                # set the wandb project where this run will be logged
-                                entity="large_depth_team",
-                                project=wandb_project_name,
+                                if not args.no_wandb:
+                                    wandb.init(
+                                    # set the wandb project where this run will be logged
+                                    entity=wand_db_team_name,
+                                    project=wandb_project_name,
 
-                                # track hyperparameters and run metadata
-                                config=args.__dict__
-                                )
-                                wandb.run.name = run_name
+                                    # track hyperparameters and run metadata
+                                    config=args.__dict__
+                                    )
+                                    wandb.run.name = run_name
 
                                 args = process_args(args)
                                 
@@ -332,7 +337,7 @@ if __name__ == '__main__':
                                     if batches_seen >= max_updates and max_updates!=-1:
                                         print("exiting")
                                         break
-
-                                wandb.finish()
+                                if not args.no_wandb:
+                                    wandb.finish()
         
 
