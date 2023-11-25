@@ -321,7 +321,7 @@ if __name__ == '__main__':
                                 metrics = {'train_loss': [], 'ens_train_loss': [], 'test_loss': [], 'ens_test_loss': [], 'test_acc': [], 'ens_test_acc': [], 'train_acc': [], 'ens_train_acc': []}
                                 batches_seen = 0
                                 for epoch in range(start_epoch, start_epoch+args.epochs):
-                                    metrics, batches_seen = train(epoch,batches_seen,nets,metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=max_updates, activations=activations, get_entropies=True)
+                                    metrics, batches_seen = train(epoch,batches_seen,nets,metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, activations=activations, get_entropies=True)
                                     metrics = test(nets, metrics, num_classes, testloader, criterion, device)
                                     
                                     print('Saving..')
