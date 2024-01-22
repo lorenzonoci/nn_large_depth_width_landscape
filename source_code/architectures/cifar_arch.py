@@ -213,16 +213,16 @@ class ConvNet(nn.Module):
         
         self.block1 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
-        self.conv02 = ScaledLayer(nn.Conv2d(width, 2*width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
+        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
         
-        self.block2 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, 2*width, 2*width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        self.block2 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
-        self.conv03 = ScaledLayer(nn.Conv2d(2*width, 4*width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
+        self.conv03 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
 
-        self.block3 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, 4*width, 4*width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        self.block3 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
         final_size =  self.img_dim//(8*init_stride) 
-        self.final_width = int(final_size**2 * 4 * width)
+        self.final_width = int(final_size**2 * width)
         self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
         self.gamma = self.gamma * self.gamma_zero
         
