@@ -32,9 +32,9 @@ class BlockLayer(nn.Module):
                 
 
 class ResidualBranch(nn.Module):
-    def __init__(self, block_class, fan_in, fan_out, n_layers=1, sigma_init_last=1.0, **kwargs):
+    def __init__(self, block_class, fan_in, fan_out, n_layers=1, sigma_init_last=1.0, sigma_init=1.0, **kwargs):
         super().__init__()
-        self.branch = nn.ModuleList([block_class(fan_in, fan_out, **kwargs) for _ in range(n_layers-1)])
+        self.branch = nn.ModuleList([block_class(fan_in, fan_out, sigma_init=sigma_init, **kwargs) for _ in range(n_layers-1)])
         self.branch.append(block_class(fan_in, fan_out, sigma_init=sigma_init_last, **kwargs))
         
     def forward(self, x):
@@ -120,6 +120,77 @@ class ResidualBranch(nn.Module):
 #             branch.set_to_lazy()
             
             
+# class ConvNet(nn.Module):
+#     def __init__(self, width, n_blocks, res_scaling=1, skip_scaling=1, beta=1, gamma_zero=1, num_classes=10, img_dim=32,
+#                  norm=None, layers_per_block=1, zero_init_readout=False, non_lin_first=True, gamma='sqrt_width', init_stride=1,
+#                  depth_scale_non_res_layers=False, sigma_last_layer_per_block=1, bias=None, base_width=1.0, sigma_init=1.0):
+#         super().__init__()
+
+#         self.tot_n_blocks = n_blocks
+#         self.n_blocks = n_blocks // 3
+#         self.res_scaling = res_scaling
+#         self.skip_scaling = skip_scaling
+#         self.beta = beta
+#         self.gamma_zero = gamma_zero
+#         self.img_dim = img_dim
+#         self.zero_init_readout = zero_init_readout
+#         self.depth_scale_non_res_layers = depth_scale_non_res_layers
+        
+#         depth_scale = 1.0 if not self.depth_scale_non_res_layers else math.sqrt(self.tot_n_blocks)
+
+#         self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=2*init_stride, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale*sigma_init, base_width=base_width)
+        
+#         self.block1 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width, sigma_init=sigma_init), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        
+#         self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale*sigma_init, base_width=base_width)
+        
+#         self.block2 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width, sigma_init=sigma_init), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        
+#         #self.conv03 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale*sigma_init, base_width=base_width)
+
+#         self.block3 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width, sigma_init=sigma_init), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        
+#         final_size =  self.img_dim//(8*init_stride) 
+#         self.final_width = int(final_size**2 * width)
+#         self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
+#         self.gamma = self.gamma * self.gamma_zero
+        
+#         sigma_init = 0.0 if self.zero_init_readout else sigma_init
+#         self.fc = ScaledLayer(nn.Linear(self.final_width, num_classes, bias=bias), sigma_init=sigma_init*depth_scale, depth_scale=1/depth_scale, gamma=self.gamma)
+                
+#     def forward(self, x):
+#         x = self.conv01(x)
+#         x = nn.functional.relu(x)
+#         for layer in self.block1:
+#             x = self.skip_scaling*x + self.beta * layer(x)
+#         x = F.max_pool2d(x, 2, 2) 
+#         x = self.conv02(x)
+#         for layer in self.block2:
+#             x =  self.skip_scaling*x + self.beta * layer(x)
+#         x = nn.functional.relu(x)
+#         x = F.max_pool2d(x, 2, 2)
+#         #x = self.conv03(x)
+#         for layer in self.block3:
+#             x =  self.skip_scaling*x + self.beta * layer(x)
+#         x = x.view(-1, self.final_width)
+#         x = self.fc(x)
+        
+#         return x
+    
+#     def set_to_lazy(self):
+#         for branch in self.block1:
+#             branch.set_to_lazy()
+#         for branch in self.block2:
+#             branch.set_to_lazy()
+#         for branch in self.block3:
+#             branch.set_to_lazy()
+            
+            
+#     def get_module_classes_to_log(self):
+#         return (ScaledResidualBranch, ScaledLayer)
+    
+    
+    
 class ConvNet(nn.Module):
     def __init__(self, width, n_blocks, res_scaling=1, skip_scaling=1, beta=1, gamma_zero=1, num_classes=10, img_dim=32,
                  norm=None, layers_per_block=1, zero_init_readout=False, non_lin_first=True, gamma='sqrt_width', init_stride=1,
@@ -188,5 +259,4 @@ class ConvNet(nn.Module):
             
     def get_module_classes_to_log(self):
         return (ScaledResidualBranch, ScaledLayer)
-    
 

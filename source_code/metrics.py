@@ -88,4 +88,7 @@ def entropies_dict(activations):
             tot_mean_entr, _ = get_entropy(activ, already_softmaxed=True, return_variance=False)
             entropies["entr_" + name] = tot_mean_entr
     return entropies
+
+
+# def sharpness():
             

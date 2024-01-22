@@ -5,15 +5,16 @@ import torch
 import torch.nn as nn
 import random
 import wandb
-from utils import load_data, get_model, get_optimizers, process_args
+from utils import load_data, get_model, get_optimizers, process_args, set_parametr_args
 from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
 from metrics import register_activation_hooks
+import json
+from pyhessian import hessian
 
-
-wandb_project_name = 'optimize_depth_scale_arch'
+wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
@@ -91,43 +92,22 @@ if __name__ == '__main__':
     parser.add_argument('--use_relu_attn', action='store_true')
     parser.add_argument('--log_activations', action='store_true')
     parser.add_argument('--no_wandb', action='store_false')
+    parser.add_argument('--logging_steps', type=int, default=200)
+    parser.add_argument('--use_mse_loss', action='store_true')
+    parser.add_argument('--zero_init_readout', action='store_true')
     args = parser.parse_args()
     
     
-    if args.parametr == 'sp':
-        args.res_scaling_type = 'none'
-        args.depth_scale_lr = 'none'
-        args.depth_scale_non_res_layers = False
-        args.optimizer = 'adam' if 'adam' in args.optimizer else 'sgd'
-        args.gamma = 'none'
-        
-    elif args.parametr == 'mup':
-        args.res_scaling_type = 'none'
-        args.depth_scale_lr = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
-        args.depth_scale_non_res_layers = False
-        args.optimizer = 'muadam' if 'adam' in args.optimizer else 'musgd'
-        args.gamma = 'sqrt_width'
-        
-    elif args.parametr == 'mup_sqrt_depth':
-        args.res_scaling_type = 'sqrt_depth'
-        args.depth_scale_lr = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
-        args.depth_scale_non_res_layers = False
-        args.optimizer = 'muadam' if 'adam' in args.optimizer else 'musgd'
-        args.gamma = 'sqrt_width'
-    
-    elif args.parametr == 'mup_depth':
-        args.res_scaling_type = 'depth'
-        args.depth_scale_lr = 'none' if "adam" in args.optimizer else 'depth'
-        args.depth_scale_non_res_layers = True
-        args.optimizer = 'muadam' if 'adam' in args.optimizer else 'musgd'
-        args.gamma = 'sqrt_width'
-    
-    elif args.parametr != 'none':
-        raise ValueError()
+    set_parametr_args(args.parametr, args)
     
     c = 0
     if args.lr == -1:
-        lrs = np.logspace(-2.5, 1.5, num=19)[4:14] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+    #     lrs = [  11.364637,   18.957357,   31.622777,   46.415888,   68.129207,
+    #     100.,  146.779927,  215.443469,  316.227766,  464.158883,
+    #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
+    #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-2.5, 1.5, num=19)[:12] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        #lrs = np.logspace(1.5, 5.5, num=19)[7:9] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
         lrs = [args.lr]
@@ -188,12 +168,14 @@ if __name__ == '__main__':
                                       width_mult {args.width_mult}, beta {args.beta}, gamma_zero {args.gamma_zero} weight_decay {args.weight_decay}")
                                 print(args)
                                 ## TODO: CODE THIS BETTER
-                                if args.dataset == "imgnet":
-                                    num_classes = 1000 
+                                if args.use_mse_loss:
+                                    args.num_classes = 1
+                                elif args.dataset == "imgnet":
+                                    args.num_classes = 1000 
                                 elif args.dataset == "tiny_imgnet":
-                                    num_classes = 200
+                                    args.num_classes = 200
                                 elif args.dataset == "cifar10":
-                                    num_classes = 10
+                                    args.num_classes = 10
                                 else:
                                     raise ValueError()
                                 
@@ -206,6 +188,9 @@ if __name__ == '__main__':
                                 if not os.path.isdir(args.save_path):
                                     os.mkdir(args.save_path)
 
+                                with open(os.path.join(args.save_path, "args.json"), "w") as fp:
+                                    json.dump(vars(args), fp, indent=4)
+                                    
                                 if not args.no_wandb:
                                     wandb.init(
                                     # set the wandb project where this run will be logged
@@ -246,13 +231,21 @@ if __name__ == '__main__':
                                     worker_seed = torch.initial_seed() % 2**32
                                     np.random.seed(worker_seed)
                                     random.seed(worker_seed)
+                                
+                                # Get a large batch for hessian evaluations
+                                b_size = args.batch_size
+                                args.batch_size = 1024
+                                trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
+                                inputs, targets = next(iter(trainloader))
+                                first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
+                                args.batch_size = b_size
+                                
                                 trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                 if len(batch_sizes) > 1 and max_updates == -1:
                                     # epochs x n_batches
                                     max_updates = args.epochs * len(trainloader) # calculate n updates based on first batch size
                                     args.epochs = 1000 # anyway it will break before
                                     print(f"Training for {max_updates} steps")
-
 
                                 # Model
                                 print('==> Building model..')
@@ -287,7 +280,10 @@ if __name__ == '__main__':
                                     [net.load_state_dict(net_weights) for (net, net_weights) in zip(nets, nets_weights)]
                                     start_epoch = state['epoch'] + 1
 
-                                criterion = nn.CrossEntropyLoss()
+                                if args.use_mse_loss:
+                                    criterion = nn.MSELoss()
+                                else:
+                                    criterion = nn.CrossEntropyLoss()
                                 
                                 if args.test_parametr:
                                     #parametr_check_weight_space(args.arch, 2, [1, 2, 4, 8, 16, 32, 64], trainloader, device, criterion, args, n_steps=10, save_folder="./coord_check_weight_{}".format(args.parametr))
@@ -318,11 +314,20 @@ if __name__ == '__main__':
                                 else:
                                     schedulers = []
 
-                                metrics = {'train_loss': [], 'ens_train_loss': [], 'test_loss': [], 'ens_test_loss': [], 'test_acc': [], 'ens_test_acc': [], 'train_acc': [], 'ens_train_acc': []}
+                                metrics = {'train_loss': [np.nan], 'ens_train_loss': [np.nan], 'test_loss': [np.nan], 'ens_test_loss': [np.nan], 'test_acc': [np.nan], 'ens_test_acc': [np.nan], 'train_acc': [np.nan], 'ens_train_acc': [np.nan], 'trace': [], 'top_eig': []}
+                                nets[0].eval()
+                                hessian_comp = hessian(nets[0], criterion, data=(first_inputs, first_targets), cuda=True)
+                                top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=1)
+                                trace = hessian_comp.trace()
+                                metrics["trace"] += [np.mean(trace)]
+                                metrics["top_eig"] += [top_eigenvalues[-1]]
+                                
+                                #exit()
                                 batches_seen = 0
                                 for epoch in range(start_epoch, start_epoch+args.epochs):
-                                    metrics, batches_seen = train(epoch,batches_seen,nets,metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, activations=activations, get_entropies=True)
-                                    metrics = test(nets, metrics, num_classes, testloader, criterion, device)
+                                    metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, 
+                                                                  activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets)
+                                    metrics = test(nets, metrics, args.num_classes, testloader, criterion, device)
                                     
                                     print('Saving..')
                                     state = {
@@ -333,7 +338,7 @@ if __name__ == '__main__':
                                         os.mkdir(args.save_path)
                                     torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
                                     net_state = {'nets': [net.state_dict() for net in nets]}
-                                    torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_last_.pth')
+                                    #torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_last_.pth')
                                     if batches_seen >= max_updates and max_updates!=-1:
                                         print("exiting")
                                         break

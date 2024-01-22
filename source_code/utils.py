@@ -21,6 +21,42 @@ import numpy as np
 from architectures.vit import ViT
 
 
+def set_parametr_args(parametr, args=None):
+    d = {} if args is None else vars(args)
+    if parametr == 'sp':
+        d["res_scaling_type"] = 'none'
+        d["depth_scale_lr"] = 'none'
+        d["depth_scale_non_res_layers"] = False
+        d["optimizer"] = 'adam' if 'adam' in args.optimizer else 'sgd'
+        d["gamma"] = 'none'
+        
+    elif parametr == 'mup':
+        d["res_scaling_type"] = 'none'
+        d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
+        d["depth_scale_non_res_layers"] = False
+        d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
+        d["gamma"] = 'sqrt_width'
+        
+    elif parametr == 'mup_sqrt_depth':
+        d["res_scaling_type"] = 'sqrt_depth'
+        d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
+        d["depth_scale_non_res_layers"] = False
+        d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
+        d["gamma"] = 'sqrt_width'
+    
+    elif parametr == 'mup_depth':
+        d["res_scaling_type"] = 'depth'
+        d["depth_scale_lr"] = 'none' if "adam" in args.optimizer else 'depth'
+        d["depth_scale_non_res_layers"] = True
+        d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
+        d["gamma"] = 'sqrt_width'
+    
+    elif parametr != 'none':
+        raise ValueError()
+    
+    return d
+    
+    
 def get_width(model_name, width_mult):
     if model_name == "conv":
         width = int(16 * width_mult)
@@ -77,15 +113,15 @@ def get_model(arch, width, depth, args):
     if arch == "conv" and args.dataset == "imgnet":
         net = ConvNet(width=width, n_blocks=depth, gamma=args.gamma, 
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
-                      beta=args.beta, gamma_zero=args.gamma_zero, num_classes = 1000, img_dim = 224, norm=args.norm,
+                      beta=args.beta, gamma_zero=args.gamma_zero, num_classes=args.num_classes, img_dim = 224, norm=args.norm,
                       non_lin_first=True, layers_per_block=args.layers_per_block, sigma_last_layer_per_block=args.sigma_last_layer_per_block,
-                      init_stride=2, depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width)    
+                      init_stride=2, depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)    
     elif arch == "conv" and args.dataset == "cifar10":
         net = ConvNet(width=width, n_blocks=depth,  gamma=args.gamma, 
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
-                      beta=args.beta, gamma_zero=args.gamma_zero, norm=args.norm, layers_per_block=args.layers_per_block,
+                      beta=args.beta, gamma_zero=args.gamma_zero, num_classes=args.num_classes, norm=args.norm, layers_per_block=args.layers_per_block,
                       non_lin_first=True, sigma_last_layer_per_block=args.sigma_last_layer_per_block, init_stride=2,
-                      depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width)
+                      depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
         
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 
@@ -147,7 +183,10 @@ def get_optimizers(nets, args):
         raise ValueError()
     return optimizers
     
-def load_data(args, generator, seed_worker):
+def load_data(args, generator=None, seed_worker=None):
+    if not hasattr(args, "no_data_augm"):
+        args.no_data_augm = False
+        
     if args.dataset == "imgnet":
         transform_train = transforms.Compose([
         transforms.RandomResizedCrop(224),
@@ -174,7 +213,7 @@ def load_data(args, generator, seed_worker):
             testset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.test_num_workers, generator=generator, worker_init_fn = seed_worker)
     
     elif args.dataset == "cifar10":
-        if not  args.no_data_augm:
+        if not args.no_data_augm:
             print("Using data augmentation")
             transform_train = transforms.Compose([
                     transforms.Resize((32,32)), 
