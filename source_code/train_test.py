@@ -50,6 +50,9 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             #print(targets.shape)
             mean_logit += 1.0/E * outputs
             loss = criterion(outputs, targets)
+            if torch.isnan(loss):
+                raise ValueError("Loss is nan, quitting training")
+                exit(1)
             loss.backward()
             optimizers[e].step()
             train_loss += (loss.item() / len(nets))
@@ -155,6 +158,9 @@ def test(nets, metrics, num_classes, testloader, criterion, device):
                 #all_logits_correct[e] += [ correct_logit ] 
                 #mean_logit += 1/len(nets) * outputs
                 loss = criterion(outputs, targets)
+                if torch.isnan(loss):
+                    raise ValueError("Loss is nan, quitting training")
+                    exit(1)
                 test_loss += loss.item()/len(nets)
                 _, predicted = outputs.max(1)
                 total += targets.size(0)

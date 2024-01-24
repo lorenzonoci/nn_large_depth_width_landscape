@@ -235,12 +235,12 @@ def load_data(args, generator=None, seed_worker=None):
                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                             ])
         trainset = torchvision.datasets.CIFAR10(
-            root=args.data_path, train=True, transform=transform_train, download=True)
+            root=args.data_path, train=True, transform=transform_train, download=False)
         trainloader = torch.utils.data.DataLoader(
             trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, generator=generator, worker_init_fn = seed_worker)
 
         testset = torchvision.datasets.CIFAR10( 
-            root=args.data_path, train=False, transform=transform_test, download=True)
+            root=args.data_path, train=False, transform=transform_test, download=False)
         testloader = torch.utils.data.DataLoader(
             testset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.test_num_workers, generator=generator, worker_init_fn = seed_worker)
         
