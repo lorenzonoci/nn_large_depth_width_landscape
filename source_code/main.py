@@ -95,6 +95,7 @@ if __name__ == '__main__':
     parser.add_argument('--logging_steps', type=int, default=200)
     parser.add_argument('--use_mse_loss', action='store_true')
     parser.add_argument('--zero_init_readout', action='store_true')
+    parser.add_argument('--random_features', action='store_true')
     args = parser.parse_args()
     
     
@@ -106,7 +107,8 @@ if __name__ == '__main__':
     #     100.,  146.779927,  215.443469,  316.227766,  464.158883,
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[:12] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-6.5, -2.5, num=19)[-3:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = lrs.tolist() + np.logspace(-2.5, 1.5, num=19)[:3].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[7:9] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
@@ -253,6 +255,13 @@ if __name__ == '__main__':
                                 for e in range(E):
                                     torch.manual_seed(e)
                                     nets.append(get_model(args.arch, args.width, args.depth, args))
+                                
+                                if args.random_features:
+                                    for net in nets:
+                                        for name, param in net.named_parameters():
+                                            if not name.startswith('fc'):
+                                                param.requires_grad = False
+                                                
                                 print(nets[0])
                                 if args.log_activations:
                                     activations = register_activation_hooks(nets[0])
@@ -338,7 +347,7 @@ if __name__ == '__main__':
                                         os.mkdir(args.save_path)
                                     torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
                                     net_state = {'nets': [net.state_dict() for net in nets]}
-                                    #torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_last_.pth')
+                                    torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_last_.pth')
                                     if batches_seen >= max_updates and max_updates!=-1:
                                         print("exiting")
                                         break
