@@ -1,5 +1,6 @@
 import torch
 import re
+from torch.func import functional_call, vmap, jacrev
 
 def activations_norm_to_df(df, activations_t1, activations_t2, step):
     for name, activ_t1 in activations_t1.items():
@@ -89,6 +90,30 @@ def entropies_dict(activations):
             entropies["entr_" + name] = tot_mean_entr
     return entropies
 
+
+# From: https://pytorch.org/tutorials/intermediate/neural_tangent_kernels.html
+
+def empirical_ntk_jacobian_contraction(model, fnet_single, x1, x2):
+    
+    params = {k: v.detach() for k, v in model.named_parameters()}
+    
+    # Compute J(x1)
+    jac1 = vmap(jacrev(fnet_single), (None, 0))(model, params, x1)
+    jac1 = jac1.values()
+    jac1 = [j.flatten(2) for j in jac1]
+
+    # Compute J(x2)
+    jac2 = vmap(jacrev(fnet_single), (None, 0))(model, params, x2)
+    jac2 = jac2.values()
+    jac2 = [j.flatten(2) for j in jac2]
+
+    # Compute J(x1) @ J(x2).T
+    result = torch.stack([torch.einsum('Naf,Mbf->NMab', j1, j2) for j1, j2 in zip(jac1, jac2)])
+    result = result.sum(0)
+    return result
+
+def fnet_single(model, params, x):
+    return functional_call(model, params, (x.unsqueeze(0),)).squeeze(0)
 
 # def sharpness():
             

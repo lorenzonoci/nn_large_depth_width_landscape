@@ -2,7 +2,7 @@ import wandb
 import torch
 import sys
 from metrics import gradient_norm
-from metrics import activation_norm_dict, entropies_dict
+from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single
 from pyhessian import hessian
 import numpy as np
 
@@ -81,7 +81,8 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             trace = hessian_comp.trace()
             metrics["trace"] += [np.mean(trace)]
             metrics["top_eig"] += [top_eigenvalues[-1]]
-                    
+            #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
+            
             if not use_mse_loss:
                 if total > 0 and total_ens > 0:
                     metrics['train_acc'] += [100.0 * correct/total]
