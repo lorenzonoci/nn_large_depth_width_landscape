@@ -1,25 +1,20 @@
 import wandb
 import torch
 import sys
-from metrics import gradient_norm
+from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf
 from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single
 from pyhessian import hessian
 import numpy as np
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None):
-    #from utils import progress_bar
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False):
+    
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
         net.train()
 
     E = len(nets)
-
-    # if use_cut_mix_mixup:
-    #     cutmix = v2.CutMix(num_classes=num_classes)
-    #     mixup = v2.MixUp(num_classes=num_classes)
-    #     cutmix_or_mixup = v2.RandomChoice([cutmix, mixup])
         
     compute_every = logging_steps
     train_loss = 0
@@ -33,8 +28,7 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
     
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
-        # if use_cut_mix_mixup:
-        #     inputs, targets = cutmix_or_mixup(inputs, targets)
+        
         if use_mse_loss:
             targets = targets.float() / 10
             mean_logit = torch.zeros((targets.shape[0],)).to(device)
@@ -46,13 +40,12 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             
             if use_mse_loss:
                 outputs = outputs.flatten()
-            #print(outputs.shape)
-            #print(targets.shape)
+                
             mean_logit += 1.0/E * outputs
             loss = criterion(outputs, targets)
-            if torch.isnan(loss):
-                raise ValueError("Loss is nan, quitting training")
-                exit(1)
+            # if torch.isnan(loss):
+            #     raise ValueError("Loss is nan, quitting training")
+            
             loss.backward()
             optimizers[e].step()
             train_loss += (loss.item() / len(nets))
@@ -65,9 +58,6 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             total_ens += targets.size(0)
             _,predict_ens = mean_logit.max(1)
             correct_ens += predict_ens.eq(targets).sum().item()
-        #progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Ens Loss: %.3f | Acc: %.3f%% (%d/%d) | Ens Acc: %.3f%% (%d/%d)'
-        #            % (train_loss/(batch_idx+1), ens_train_loss/(batch_idx+1), 100.*correct/total, correct, total, 100.*correct_ens/total_ens, correct_ens, total_ens))
-        #sys.stdout.write(f'\r batch = {batch_idx} , train loss = {train_loss/(batch_idx+1)}')
         
         if batches_seen % compute_every == 0 and batches_seen > 0:
             print("train_loss: {}, {}".format(train_loss/(compute_every), len(targets)))
@@ -76,11 +66,15 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             
             optimizers[0].zero_grad()
             nets[0].eval()
-            hessian_comp = hessian(nets[0], criterion, data=(eval_inputs, eval_targets), cuda=True)
-            top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=1)
-            trace = hessian_comp.trace()
+            if eval_hessian_random_features:
+                trace, top_eigenvalues = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
+                metrics["trace_rf"] += [np.mean(trace)]
+                metrics["top_eig_rf"] += [top_eigenvalues[-1]]
+            
+            trace, top_eigenvalues = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
             metrics["trace"] += [np.mean(trace)]
             metrics["top_eig"] += [top_eigenvalues[-1]]
+            
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             
             if not use_mse_loss:

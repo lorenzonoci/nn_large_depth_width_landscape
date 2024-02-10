@@ -10,7 +10,7 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict
 import json
 from pyhessian import hessian
 
@@ -327,19 +327,22 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = {'train_loss': [np.nan], 'ens_train_loss': [np.nan], 'test_loss': [np.nan], 'ens_test_loss': [np.nan], 'test_acc': [np.nan], 'ens_test_acc': [np.nan], 'train_acc': [np.nan], 'ens_train_acc': [np.nan], 'trace': [], 'top_eig': []}
+                                    metrics = get_metrics_dict(hessian=True, hessian_rf=True)
+                                    
                                     nets[0].eval()
-                                    hessian_comp = hessian(nets[0], criterion, data=(first_inputs, first_targets), cuda=True)
-                                    top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=1)
-                                    trace = hessian_comp.trace()
+                                    top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                     metrics["trace"] += [np.mean(trace)]
                                     metrics["top_eig"] += [top_eigenvalues[-1]]
+                                    top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                    metrics["trace_rf"] += [np.mean(trace)]
+                                    metrics["top_eig_rf"] += [top_eigenvalues[-1]]
                                     
                                     #exit()
                                     batches_seen = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, 
-                                                                    activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets)
+                                                                    activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
+                                                                    eval_hessian_random_features=True)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device)
                                         
                                         print('Saving..')

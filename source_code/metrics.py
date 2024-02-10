@@ -1,7 +1,31 @@
 import torch
 import re
 from torch.func import functional_call, vmap, jacrev
+from pyhessian import hessian
+import numpy as np
 
+
+
+def get_metrics_dict(hessian=True, hessian_rf=True):
+    metrics = []
+    metrics_dict = {}
+    c = []
+    if hessian:
+        metrics.extend(["trace", "top_eig"])
+        c = [np.nan]
+    if hessian_rf:
+        metrics.extend(["trace_rf", "top_eig_rf"])
+        c = [np.nan]
+    
+    metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
+    metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
+
+    for k in metrics:
+        metrics_dict[k] = []
+    for k in metrics_loss + metrics_acc:
+        metrics_dict[k] = c
+    return metrics_dict
+    
 def activations_norm_to_df(df, activations_t1, activations_t2, step):
     for name, activ_t1 in activations_t1.items():
         activ_t2 = activations_t2[name]
@@ -115,5 +139,30 @@ def empirical_ntk_jacobian_contraction(model, fnet_single, x1, x2):
 def fnet_single(model, params, x):
     return functional_call(model, params, (x.unsqueeze(0),)).squeeze(0)
 
-# def sharpness():
+
+def hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=True):
+    hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
+    top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=1)
+    trace = hessian_comp.trace()
+    return top_eigenvalues, trace
+
+
+def ntk_features(fnet, params, x):
+    def fnet_single(params, x):
+        return fnet(params, x.unsqueeze(0)).squeeze(0)
+    # Compute J(x1)
+    jac1 = vmap(jacrev(fnet_single), (None, 0))(params, x)
+    jac1 = torch.concat([jac.flatten(2) for jac in jac1], dim=-1) # flatten to n_samples x n_classes x n_parameters per layer
+    return jac1.mean(1) # mean over classes
+
+
+def hessian_trace_and_top_eig_rf(model, criterion, inputs, targets, cuda=True):
+    for name, param in model.named_parameters():
+        if not name.startswith('fc'):
+            param.requires_grad = False
+    trace_rf, top_eigenvalues_rf = hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=cuda)
+    for name, param in model.named_parameters():
+        param.requires_grad = True
+    return trace, top_eigenvalues_rf
+
             
