@@ -110,8 +110,8 @@ if __name__ == '__main__':
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[11:].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        #lrs = np.logspace(1.5, 5.5, num=19)[7:9] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-2.5, 1.5, num=19)[:11].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        #lrs = np.logspace(1.5, 5.5, num=19)[1:3] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
         lrs = [args.lr]
@@ -179,9 +179,9 @@ if __name__ == '__main__':
                                         width_mult {args.width_mult}, beta {args.beta}, gamma_zero {args.gamma_zero} weight_decay {args.weight_decay}")
                                     print(args)
                                     ## TODO: CODE THIS BETTER
-                                    if args.use_mse_loss:
-                                        args.num_classes = 1
-                                    elif args.dataset == "imgnet":
+                                    # if args.use_mse_loss:
+                                    #     args.num_classes = 1
+                                    if args.dataset == "imgnet":
                                         args.num_classes = 1000 
                                     elif args.dataset == "tiny_imgnet":
                                         args.num_classes = 200
@@ -248,6 +248,8 @@ if __name__ == '__main__':
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                     inputs, targets = next(iter(trainloader))
                                     first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
+                                    if args.use_mse_loss:
+                                        first_targets = nn.functional.one_hot(first_targets, num_classes=args.num_classes).float()
                                     args.batch_size = b_size
                                     
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
@@ -348,7 +350,7 @@ if __name__ == '__main__':
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
                                                                     eval_hessian_random_features=args.eval_hessian_random_features)
-                                        metrics = test(nets, metrics, args.num_classes, testloader, criterion, device)
+                                        metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
                                         state = {
@@ -359,7 +361,7 @@ if __name__ == '__main__':
                                             os.mkdir(args.save_path)
                                         torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
                                         net_state = {'nets': [net.state_dict() for net in nets]}
-                                        torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
+                                        #torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
                                         if batches_seen >= max_updates and max_updates!=-1:
                                             print("exiting")
                                             break

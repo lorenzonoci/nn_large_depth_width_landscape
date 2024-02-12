@@ -29,17 +29,19 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
     for batch_idx, (inputs, targets) in enumerate(trainloader):
         inputs, targets = inputs.to(device), targets.to(device)
         
-        if use_mse_loss:
-            targets = targets.float() / 10
-            mean_logit = torch.zeros((targets.shape[0],)).to(device)
-        else:
-            mean_logit = torch.zeros((targets.shape[0],num_classes)).to(device)
+        # if use_mse_loss:
+        #     targets = targets.float() / 10
+        #     mean_logit = torch.zeros((targets.shape[0],)).to(device)
+        # else:
+        mean_logit = torch.zeros((targets.shape[0],num_classes)).to(device)
         for e, net in enumerate(nets):
+            if use_mse_loss:
+                targets = torch.nn.functional.one_hot(targets, num_classes=num_classes).float()
             optimizers[e].zero_grad()
             outputs = net(inputs)
             
-            if use_mse_loss:
-                outputs = outputs.flatten()
+            # if use_mse_loss:
+            #     outputs = outputs.flatten()
                 
             mean_logit += 1.0/E * outputs
             loss = criterion(outputs, targets)
@@ -49,15 +51,19 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             loss.backward()
             optimizers[e].step()
             train_loss += (loss.item() / len(nets))
-            if not use_mse_loss:
-                _, predicted = outputs.max(1)
-                total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+            # if not use_mse_loss:
+            _, predicted = outputs.max(1)
+            total += targets.size(0)
+            if use_mse_loss:
+                _, t_max = targets.max(1)
+            else:
+                t_max = targets
+            correct += predicted.eq(t_max).sum().item()
         ens_train_loss += criterion(mean_logit, targets).item()
-        if not use_mse_loss:
-            total_ens += targets.size(0)
-            _,predict_ens = mean_logit.max(1)
-            correct_ens += predict_ens.eq(targets).sum().item()
+        # if not use_mse_loss:
+        total_ens += targets.size(0)
+        _,predict_ens = mean_logit.max(1)
+        correct_ens += predict_ens.eq(t_max).sum().item()
         
         if batches_seen % compute_every == 0 and batches_seen > 0:
             print("train_loss: {}, {}".format(train_loss/(compute_every), len(targets)))
@@ -77,23 +83,23 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             
-            if not use_mse_loss:
-                if total > 0 and total_ens > 0:
-                    metrics['train_acc'] += [100.0 * correct/total]
-                    metrics['ens_train_acc'] += [100.0 * correct_ens/total_ens] 
+            # if not use_mse_loss:
+            if total > 0 and total_ens > 0:
+                metrics['train_acc'] += [100.0 * correct/total]
+                metrics['ens_train_acc'] += [100.0 * correct_ens/total_ens] 
             
             if log:
-                if not use_mse_loss:
-                    d_log = {
-                        'train_loss': train_loss/compute_every,
-                        'train_acc': 100.*correct/total,
-                        'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr']
-                        }
-                else:
-                    d_log = {
+                # if not use_mse_loss:
+                d_log = {
                     'train_loss': train_loss/compute_every,
+                    'train_acc': 100.*correct/total,
                     'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr']
                     }
+                # else:
+                #     d_log = {
+                #     'train_loss': train_loss/compute_every,
+                #     'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr']
+                #     }
                 d_log.update(gradient_norm(net))
                 if activations is not None:
                     d_log.update(activation_norm_dict(activations))
@@ -130,7 +136,7 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
     return metrics, batches_seen
 
 
-def test(nets, metrics, num_classes, testloader, criterion, device):
+def test(nets, metrics, num_classes, testloader, criterion, device, use_mse_loss):
     #from utils import progress_bar
     global best_acc
     for e,net in enumerate(nets):
@@ -147,6 +153,8 @@ def test(nets, metrics, num_classes, testloader, criterion, device):
             inputs, targets = inputs.to(device), targets.to(device)
             mean_logit = torch.zeros((targets.shape[0],num_classes)).to(device)
             for e, net in enumerate(nets):
+                if use_mse_loss:
+                    targets = torch.nn.functional.one_hot(targets, num_classes=num_classes).float()
                 outputs = net(inputs)
                 # get the logit 
                 #correct_logit = outputs[:,targets]
@@ -159,11 +167,15 @@ def test(nets, metrics, num_classes, testloader, criterion, device):
                 test_loss += loss.item()/len(nets)
                 _, predicted = outputs.max(1)
                 total += targets.size(0)
-                correct += predicted.eq(targets).sum().item()
+                if use_mse_loss:
+                    _, t_max = targets.max(1)
+                else:
+                    t_max = targets
+                correct += predicted.eq(t_max).sum().item()
             ens_test_loss += criterion(mean_logit, targets).item()
             total_ens += targets.size(0)
             _,predict_ens = mean_logit.max(1)
-            correct_ens += predict_ens.eq(targets).sum().item()
+            correct_ens += predict_ens.eq(t_max).sum().item()
             #progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Ens Loss: %.3f | Acc: %.3f%% (%d/%d) | Ens Acc: %.3f%% (%d/%d)'
             #         % (test_loss/(batch_idx+1), ens_test_loss/(batch_idx+1), 100.*correct/total, correct, total, 100.*correct_ens/total_ens, correct_ens, total_ens))
             #progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | Acc: %.3f%% (%d/%d) | Ens Acc: %.3f%% (%d/%d)'
