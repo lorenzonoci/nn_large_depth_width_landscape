@@ -96,6 +96,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_mse_loss', action='store_true')
     parser.add_argument('--zero_init_readout', action='store_true')
     parser.add_argument('--random_features', action='store_true')
+    parser.add_argument('--resume_dir', type=str, default='test/')
+    parser.add_argument('--eval_hessian_random_features', action='store_true')
     args = parser.parse_args()
     
     
@@ -107,8 +109,8 @@ if __name__ == '__main__':
     #     100.,  146.779927,  215.443469,  316.227766,  464.158883,
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-6.5, -2.5, num=19)[-3:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = lrs.tolist() + np.logspace(-2.5, 1.5, num=19)[:3].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-2.5, 1.5, num=19)[11:].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[7:9] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
@@ -148,6 +150,8 @@ if __name__ == '__main__':
         
     if args.seed == -1:
         seeds = [1,2,3,4]
+    else:
+        seeds = [args.seed]
     
     if c > 1:
         print(f"Warning: performing hyperparameter search over {c} parameters. It might take a while")
@@ -287,8 +291,8 @@ if __name__ == '__main__':
                                     if args.resume:
                                         # Load checkpoint.
                                         print('==> Resuming from checkpoint..')
-                                        checkpoint = torch.load(os.path.join(args.save_path, f"model_ckpt_N_{args.width_mult}_last_.pth"))
-                                        state = torch.load(os.path.join(args.save_path + f'/ckpt_N_{args.width_mult}_batches_{args.resume_epochs}_.pth'))
+                                        checkpoint = torch.load(os.path.join(args.resume_dir, f"model_ckpt_N_{args.width_mult}_epoch_{args.resume_epoch}_.pth"))
+                                        state = torch.load(os.path.join(args.resume_dir + f'/ckpt_N_{args.width_mult}_batches_{args.resume_epoch}_.pth'))
                                         nets_weights = checkpoint['nets']
                                         [net.load_state_dict(net_weights) for (net, net_weights) in zip(nets, nets_weights)]
                                         start_epoch = state['epoch'] + 1
@@ -327,22 +331,23 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=True, hessian_rf=True)
+                                    metrics = get_metrics_dict(hessian=True, hessian_rf=args.eval_hessian_random_features)
                                     
                                     nets[0].eval()
                                     top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                     metrics["trace"] += [np.mean(trace)]
                                     metrics["top_eig"] += [top_eigenvalues[-1]]
-                                    top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
-                                    metrics["trace_rf"] += [np.mean(trace)]
-                                    metrics["top_eig_rf"] += [top_eigenvalues[-1]]
+                                    if args.eval_hessian_random_features:
+                                        top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                        metrics["trace_rf"] += [np.mean(trace)]
+                                        metrics["top_eig_rf"] += [top_eigenvalues[-1]]
                                     
                                     #exit()
                                     batches_seen = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=True)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device)
                                         
                                         print('Saving..')
@@ -354,7 +359,7 @@ if __name__ == '__main__':
                                             os.mkdir(args.save_path)
                                         torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
                                         net_state = {'nets': [net.state_dict() for net in nets]}
-                                        torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_last_.pth')
+                                        torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
                                         if batches_seen >= max_updates and max_updates!=-1:
                                             print("exiting")
                                             break

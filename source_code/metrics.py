@@ -9,13 +9,13 @@ import numpy as np
 def get_metrics_dict(hessian=True, hessian_rf=True):
     metrics = []
     metrics_dict = {}
-    c = []
+    c = False
     if hessian:
         metrics.extend(["trace", "top_eig"])
-        c = [np.nan]
+        c = True
     if hessian_rf:
         metrics.extend(["trace_rf", "top_eig_rf"])
-        c = [np.nan]
+        c = True
     
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
@@ -23,7 +23,7 @@ def get_metrics_dict(hessian=True, hessian_rf=True):
     for k in metrics:
         metrics_dict[k] = []
     for k in metrics_loss + metrics_acc:
-        metrics_dict[k] = c
+        metrics_dict[k] = [np.nan] if c else []
     return metrics_dict
     
 def activations_norm_to_df(df, activations_t1, activations_t2, step):
@@ -163,6 +163,6 @@ def hessian_trace_and_top_eig_rf(model, criterion, inputs, targets, cuda=True):
     trace_rf, top_eigenvalues_rf = hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=cuda)
     for name, param in model.named_parameters():
         param.requires_grad = True
-    return trace, top_eigenvalues_rf
+    return trace_rf, top_eigenvalues_rf
 
             

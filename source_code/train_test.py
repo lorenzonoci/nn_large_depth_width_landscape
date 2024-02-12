@@ -67,11 +67,11 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             optimizers[0].zero_grad()
             nets[0].eval()
             if eval_hessian_random_features:
-                trace, top_eigenvalues = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
+                top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
                 metrics["trace_rf"] += [np.mean(trace)]
                 metrics["top_eig_rf"] += [top_eigenvalues[-1]]
             
-            trace, top_eigenvalues = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
+            top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
             metrics["trace"] += [np.mean(trace)]
             metrics["top_eig"] += [top_eigenvalues[-1]]
             
