@@ -91,7 +91,7 @@ if __name__ == '__main__':
     parser.add_argument('--test_parametr', action='store_true')
     parser.add_argument('--use_relu_attn', action='store_true')
     parser.add_argument('--log_activations', action='store_true')
-    parser.add_argument('--no_wandb', action='store_false')
+    parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--logging_steps', type=int, default=200)
     parser.add_argument('--use_mse_loss', action='store_true')
     parser.add_argument('--zero_init_readout', action='store_true')
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[:11].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-2.5, 1.5, num=19)[4:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[1:3] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
@@ -202,7 +202,7 @@ if __name__ == '__main__':
                                     with open(os.path.join(args.save_path, "args.json"), "w") as fp:
                                         json.dump(vars(args), fp, indent=4)
                                         
-                                    if not args.no_wandb:
+                                    if args.wandb:
                                         wandb.init(
                                         # set the wandb project where this run will be logged
                                         entity=wand_db_team_name,
@@ -277,6 +277,7 @@ if __name__ == '__main__':
                                         activations = register_activation_hooks(nets[0])
                                     else:
                                         activations = None
+                                        
                                     if args.multiprocessing == True:
                                         # assumes GPUs on a single node
                                         device_ids = [i for i in range(torch.cuda.device_count())]
@@ -347,7 +348,7 @@ if __name__ == '__main__':
                                     #exit()
                                     batches_seen = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
-                                        metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=not args.no_wandb, max_updates=max_updates, 
+                                        metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
                                                                     eval_hessian_random_features=args.eval_hessian_random_features)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
@@ -365,7 +366,7 @@ if __name__ == '__main__':
                                         if batches_seen >= max_updates and max_updates!=-1:
                                             print("exiting")
                                             break
-                                    if not args.no_wandb:
+                                    if args.wandb:
                                         wandb.finish()
             
 

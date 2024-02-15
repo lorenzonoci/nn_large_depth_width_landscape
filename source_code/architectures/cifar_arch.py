@@ -18,7 +18,7 @@ class BlockLayer(nn.Module):
         norm = get_norm_layer(fan_out, norm)
         self.non_lin_first = non_lin_first
         # TODO: check order of operations (especially normalization layers)
-        self.layer = nn.ModuleList([nonlin, conv, norm]) if non_lin_first else nn.ModuleList([self.conv, norm, nn.Relu()])
+        self.layer = nn.ModuleList([nonlin, conv, norm]) if non_lin_first else nn.ModuleList([conv, norm, nonlin])
         
     def forward(self, x):
         for component in self.layer:
@@ -258,5 +258,6 @@ class ConvNet(nn.Module):
             
             
     def get_module_classes_to_log(self):
-        return (ScaledResidualBranch, ScaledLayer)
+        #(ScaledResidualBranch, ScaledLayer)
+        return (ScaledResidualBranch,)
 
