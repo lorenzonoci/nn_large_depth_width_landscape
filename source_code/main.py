@@ -98,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_features', action='store_true')
     parser.add_argument('--resume_dir', type=str, default='test/')
     parser.add_argument('--eval_hessian_random_features', action='store_true')
+    parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     args = parser.parse_args()
     
     
@@ -362,7 +363,8 @@ if __name__ == '__main__':
                                             os.mkdir(args.save_path)
                                         torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
                                         net_state = {'nets': [net.state_dict() for net in nets]}
-                                        #torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
+                                        if args.save_ckpt_every_nth_epoch > 0 and epoch % args.save_ckpt_every_nth_epoch == 0:
+                                            torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
                                         if batches_seen >= max_updates and max_updates!=-1:
                                             print("exiting")
                                             break
