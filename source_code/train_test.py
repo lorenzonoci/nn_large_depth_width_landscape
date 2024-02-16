@@ -2,7 +2,7 @@ import wandb
 import torch
 import sys
 from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf
-from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single
+from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict
 from pyhessian import hessian
 import numpy as np
 
@@ -100,12 +100,13 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 #     'train_loss': train_loss/compute_every,
                 #     'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr']
                 #     }
-                d_log.update(gradient_norm(net))
+                #d_log.update(gradient_norm(net))
                 if activations is not None:
-                    d_log.update(activation_norm_dict(activations))
-                    if get_entropies:
-                        d_log.update(entropies_dict(activations))
-                    d_log.update(net.relative_branch_norms(activations))
+                    d_log.update(activ_skewness_dict(activations))
+                    # d_log.update(activation_norm_dict(activations))
+                    # if get_entropies:
+                    #     d_log.update(entropies_dict(activations))
+                    # d_log.update(net.relative_branch_norms(activations))
                 wandb.log(d_log)
             
             nets[0].train()
