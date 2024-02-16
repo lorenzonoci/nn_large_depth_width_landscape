@@ -8,7 +8,7 @@ import numpy as np
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False):
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -76,10 +76,10 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
                 metrics["trace_rf"] += [np.mean(trace)]
                 metrics["top_eig_rf"] += [top_eigenvalues[-1]]
-            
-            top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
-            metrics["trace"] += [np.mean(trace)]
-            metrics["top_eig"] += [top_eigenvalues[-1]]
+            if eval_hessian:
+                top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
+                metrics["trace"] += [np.mean(trace)]
+                metrics["top_eig"] += [top_eigenvalues[-1]]
             
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             

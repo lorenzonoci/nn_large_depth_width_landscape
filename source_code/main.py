@@ -99,6 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_dir', type=str, default='test/')
     parser.add_argument('--eval_hessian_random_features', action='store_true')
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
+    parser.add_argument('--eval_hessian',  action='store_true')
     args = parser.parse_args()
     
     
@@ -111,7 +112,7 @@ if __name__ == '__main__':
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[4:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-2.5, 1.5, num=19)[8:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[1:3] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         c += 1
     else:
@@ -338,9 +339,11 @@ if __name__ == '__main__':
                                     metrics = get_metrics_dict(hessian=True, hessian_rf=args.eval_hessian_random_features)
                                     
                                     nets[0].eval()
-                                    top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
-                                    metrics["trace"] += [np.mean(trace)]
-                                    metrics["top_eig"] += [top_eigenvalues[-1]]
+                                    
+                                    if args.eval_hessian:
+                                        top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                        metrics["trace"] += [np.mean(trace)]
+                                        metrics["top_eig"] += [top_eigenvalues[-1]]
                                     if args.eval_hessian_random_features:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace_rf"] += [np.mean(trace)]
@@ -351,7 +354,7 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
