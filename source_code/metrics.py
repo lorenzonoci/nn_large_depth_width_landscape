@@ -44,7 +44,21 @@ def tensor_norm(activation):
     n_elem = activation.numel()
     norm = 1/n_elem * float(torch.norm(activation, p=2).square().cpu())
     return norm
-       
+
+
+def activ_skewness_dict(activations):
+    d = {}
+    for name, activ in activations.items():
+        norm = activ_skewness(activ)
+        d["activ_skewness_" + name] = norm
+    return d
+
+def activ_skewness(activation):
+    # batch_size, channels, width, height
+    flat_act = torch.abs(activation.transpose(1,2).transpose(2,3).flatten(0,2)) # batch_size x width x height, n_channels
+    maxs, _ = flat_act.max(1)
+    medians, _ = flat_act.median(1)
+    return torch.mean(maxs/medians)
         
 def register_activation_hooks(model):
     activations = {}
