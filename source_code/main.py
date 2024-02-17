@@ -13,6 +13,7 @@ from test_parametr import parametr_check_width, parametr_check_depth, parametr_c
 from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict
 import json
 from pyhessian import hessian
+from asdl.kernel import kernel_eigenvalues
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
@@ -49,8 +50,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='test/',
                     help='file location to save results')
     parser.add_argument('--res_scaling_type', type=str, default='none')
-    parser.add_argument('--data_path', type=str, default='./data')
-    parser.add_argument('--dataset', type=str, default='imgnet')
+    parser.add_argument('--data_path', type=str, default='/home/ameterez/datasets')
+    parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--depth_mult', type=int, default=1)
     parser.add_argument('--skip_scaling', type=float, default=1,
                          help='set to zero to use an MLP without skip connections')
@@ -98,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--random_features', action='store_true')
     parser.add_argument('--resume_dir', type=str, default='test/')
     parser.add_argument('--eval_hessian_random_features', action='store_true')
-    parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
+    parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=1)
     args = parser.parse_args()
     
     
