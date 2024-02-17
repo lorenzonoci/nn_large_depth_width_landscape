@@ -161,8 +161,6 @@ def hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=True):
     return top_eigenvalues, trace
 
 def residual_and_top_eig_ggn(model, inputs, targets, use_mse_loss):
-    import pdb
-    pdb.set_trace()
     top_eig_ggn = kernel_eigenvalues(model, inputs, cross_entropy=(not use_mse_loss), print_progress=False)[0].item()
     outputs = model(inputs)
     if not use_mse_loss:
