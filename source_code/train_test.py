@@ -80,11 +80,11 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 metrics["top_eig_rf"] += [top_eigenvalues[-1]]
             
             top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
-            top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], inputs, targets, use_mse_loss)
+            top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], eval_inputs, eval_targets, use_mse_loss)
             metrics["trace"] += [np.mean(trace)]
             metrics["top_eig"] += [top_eigenvalues[-1]]
-            metrics['residual'] = residual
-            metrics['top_eig_ggn'] = top_eig_ggn
+            metrics['residual'] += [residual]
+            metrics['top_eig_ggn'] += [top_eig_ggn]
             
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             

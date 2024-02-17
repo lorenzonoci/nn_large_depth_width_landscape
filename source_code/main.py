@@ -10,7 +10,7 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
 import json
 from pyhessian import hessian
 from asdl.kernel import kernel_eigenvalues
@@ -340,8 +340,12 @@ if __name__ == '__main__':
                                     
                                     nets[0].eval()
                                     top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                    top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
+
                                     metrics["trace"] += [np.mean(trace)]
                                     metrics["top_eig"] += [top_eigenvalues[-1]]
+                                    metrics["top_eig_ggn"] += [top_eig_ggn]
+                                    metrics["residual"] += [residual]
                                     if args.eval_hessian_random_features:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace_rf"] += [np.mean(trace)]
