@@ -12,8 +12,6 @@ import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
 from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
 import json
-from pyhessian import hessian
-from asdl.kernel import kernel_eigenvalues
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
