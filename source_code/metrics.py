@@ -3,10 +3,10 @@ import re
 from torch.func import functional_call, vmap, jacrev
 from pyhessian import hessian
 import numpy as np
+from asdl.kernel import kernel_eigenvalues
+from torch.nn.functional import one_hot
 
-
-
-def get_metrics_dict(hessian=True, hessian_rf=True):
+def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False):
     metrics = []
     metrics_dict = {}
     c = False
@@ -15,8 +15,10 @@ def get_metrics_dict(hessian=True, hessian_rf=True):
         c = True
     if hessian_rf:
         metrics.extend(["trace_rf", "top_eig_rf"])
+        c = True  
+    if top_eig_ggn:
+        metrics.extend(["top_eig_ggn", "residual"])
         c = True
-    
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
 
@@ -160,6 +162,16 @@ def hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=True):
     trace = hessian_comp.trace()
     return top_eigenvalues, trace
 
+def residual_and_top_eig_ggn(model, inputs, targets, use_mse_loss):
+    inputs = inputs.cuda()
+    targets = targets.cuda()
+    top_eig_ggn = kernel_eigenvalues(model, inputs, cross_entropy=(not use_mse_loss), print_progress=False)[0].item()
+    outputs = model(inputs)
+    if not use_mse_loss:
+        outputs = torch.softmax(outputs, dim=1)
+    residual = (outputs - one_hot(targets)).norm(dim=1).mean(dim=0).item()
+    return top_eig_ggn, residual
+    
 
 def ntk_features(fnet, params, x):
     def fnet_single(params, x):

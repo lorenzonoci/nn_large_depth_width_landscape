@@ -10,9 +10,10 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
 import json
 from pyhessian import hessian
+from asdl.kernel import kernel_eigenvalues
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
@@ -49,8 +50,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='test/',
                     help='file location to save results')
     parser.add_argument('--res_scaling_type', type=str, default='none')
-    parser.add_argument('--data_path', type=str, default='./data')
-    parser.add_argument('--dataset', type=str, default='imgnet')
+    parser.add_argument('--data_path', type=str, default='/home/ameterez/datasets')
+    parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--depth_mult', type=int, default=1)
     parser.add_argument('--skip_scaling', type=float, default=1,
                          help='set to zero to use an MLP without skip connections')
@@ -100,6 +101,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_hessian_random_features', action='store_true')
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
+    parser.add_argument('--top_eig_ggn', action='store_true')
     args = parser.parse_args()
     
     
@@ -336,7 +338,7 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=True, hessian_rf=args.eval_hessian_random_features)
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn)
                                     
                                     nets[0].eval()
                                     
@@ -344,6 +346,12 @@ if __name__ == '__main__':
                                         top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace"] += [np.mean(trace)]
                                         metrics["top_eig"] += [top_eigenvalues[-1]]
+                                        
+                                    if args.top_eig_ggn:
+                                        top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
+                                        metrics["top_eig_ggn"] += [top_eig_ggn]
+                                        metrics["residual"] += [residual]
+                                        
                                     if args.eval_hessian_random_features:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace_rf"] += [np.mean(trace)]
@@ -354,7 +362,7 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=top_eig_ggn)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
