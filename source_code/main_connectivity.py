@@ -12,6 +12,7 @@ import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
 from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
 import json
+import copy
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
@@ -100,6 +101,10 @@ if __name__ == '__main__':
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
+    parser.add_argument('--seed1', type=int, default=1111,
+                        help='random seed')
+    parser.add_argument('--seed2', type=int, default=2222,
+                        help='random seed')
     args = parser.parse_args()
     
     
@@ -231,22 +236,31 @@ if __name__ == '__main__':
 
                                     E = args.num_ens
                                     # Set the random seed manually for reproducibility.
-                                    torch.manual_seed(args.seed)
+                                    torch.manual_seed(args.seed1)
+                                    
+                                    # Model
+                                    print('==> Building model..')
+                                    nets = []
+                                    model1 = get_model(args.arch, args.width, args.depth, args)
+                                    model2 = copy.deepcopy(model1)
+                                    nets.append(model1)
+                                    nets2 = [model2]
 
                                     # Data
                                     print('==> Preparing data..')
 
                                     g = torch.Generator()
-                                    g.manual_seed(args.seed)
+                                    g.manual_seed(args.seed1)
 
                                     def seed_worker(worker_id):
                                         worker_seed = torch.initial_seed() % 2**32
                                         np.random.seed(worker_seed)
                                         random.seed(worker_seed)
                                     
+                                    
                                     # Get a large batch for hessian evaluations
                                     b_size = args.batch_size
-                                    args.batch_size = 1024
+                                    args.batch_size = 2048
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                     inputs, targets = next(iter(trainloader))
                                     first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
@@ -254,19 +268,31 @@ if __name__ == '__main__':
                                         first_targets = nn.functional.one_hot(first_targets, num_classes=args.num_classes).float()
                                     args.batch_size = b_size
                                     
-                                    trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
+                                    
+                                    trainloader1, testloader1 = load_data(args, generator=g, seed_worker=seed_worker)
+                                    
+                                    
+                                    torch.manual_seed(args.seed2)
+
+                                    # Data
+                                    print('==> Preparing data..')
+
+                                    g = torch.Generator()
+                                    g.manual_seed(args.seed2)
+                                    
+                                    def seed_worker(worker_id):
+                                        worker_seed = torch.initial_seed() % 2**32
+                                        np.random.seed(worker_seed)
+                                        random.seed(worker_seed)
+                                    
+                                    trainloader2, testloader2 = load_data(args, generator=g, seed_worker=seed_worker)
+                                    
                                     if len(batch_sizes) > 1 and max_updates == -1:
                                         # epochs x n_batches
-                                        max_updates = args.epochs * len(trainloader) # calculate n updates based on first batch size
+                                        max_updates = args.epochs * len(trainloader1) # calculate n updates based on first batch size
                                         args.epochs = 1000 # anyway it will break before
                                         print(f"Training for {max_updates} steps")
 
-                                    # Model
-                                    print('==> Building model..')
-                                    nets = []
-                                    for e in range(E):
-                                        torch.manual_seed(e)
-                                        nets.append(get_model(args.arch, args.width, args.depth, args))
                                     
                                     if args.random_features:
                                         for net in nets:
@@ -289,9 +315,10 @@ if __name__ == '__main__':
                                             net = torch.nn.DataParallel(net, device_ids)
                                     
                                     nets = [net.to(device) for net in nets]
+                                    nets2 = [net.to(device) for net in nets2]
 
-                                    torch.manual_seed(args.seed)
-                                    torch.cuda.manual_seed(args.seed)
+                                    torch.manual_seed(args.seed1)
+                                    torch.cuda.manual_seed(args.seed1)
 
                                     if args.resume:
                                         # Load checkpoint.
@@ -315,6 +342,7 @@ if __name__ == '__main__':
                                         #exit()
                                     
                                     optimizers = get_optimizers(nets, args)
+                                    optimizers2 = get_optimizers(nets2, args)
 
                                     if args.schedule:
                                         scheduler = partial(
@@ -356,27 +384,53 @@ if __name__ == '__main__':
                                         metrics["top_eig_rf"] += [top_eigenvalues[-1]]
                                     
                                     #exit()
+                                    metrics_mc = []
+                                    metrics2 = copy.deepcopy(metrics)
                                     batches_seen = 0
+                                    batches_seen2 = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
-                                        metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
-                                                                    activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
+                                        metrics, batches_seen = train(epoch, batches_seen, nets, metrics, args.num_classes, trainloader1, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
+                                                                    activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss,
                                                                     eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn)
-                                        metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
+                                        metrics = test(nets, metrics, args.num_classes, testloader1, criterion, device, args.use_mse_loss)
                                         
-                                        print('Saving..')
+                                        
+                                        metrics2, batches_seen2 = train(epoch, batches_seen2, nets2, metrics2, args.num_classes, trainloader2, optimizers2, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
+                                                                    activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss,
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn)
+                                        metrics2 = test(nets2, metrics2, args.num_classes, testloader2, criterion, device, args.use_mse_loss)
+                                        
+                                        
+                                        # interpolate
+                                        print("Interpolating...")
+                                        metrics_epoch = get_metrics_dict(hessian=False, hessian_rf=False)
+                                        for alpha in [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+                                            d = {}
+                                            for (name1, param1), (name2, param2) in zip(model1.named_parameters(), model2.named_parameters()):
+                                                d[name1] = alpha*param1 + (1-alpha) * param2
+                                            eval_model = copy.deepcopy(model1)
+                                            eval_model.load_state_dict(d)
+                                            
+                                            metrics_epoch = test([eval_model], metrics_epoch, args.num_classes, testloader2, criterion, device, args.use_mse_loss)
+                                            first_inputs, first_targets = first_inputs.cuda(), first_targets.cuda()
+                                            outputs = eval_model(first_inputs)
+                                            loss = criterion(outputs, first_targets).item()
+                                            metrics_epoch["train_loss"] += [loss]
+                                            
+                                        print(metrics_epoch["test_loss"])    
+                                        print(metrics_epoch["train_loss"])
+                                        
+                                        metrics_mc.append(metrics_epoch)
+                                        
                                         state = {
-                                            'metrics': metrics,
+                                            'metrics': metrics_mc,
                                             'epoch': epoch
                                         }
-                                        if not os.path.isdir(args.save_path):
-                                            os.mkdir(args.save_path)
-                                        torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    
-                                        net_state = {'nets': [net.state_dict() for net in nets]}
-                                        if args.save_ckpt_every_nth_epoch > 0 and epoch % args.save_ckpt_every_nth_epoch == 0:
-                                            torch.save(net_state, args.save_path + f'/model_ckpt_N_{args.width_mult}_epoch_{epoch}_.pth')
-                                        if batches_seen >= max_updates and max_updates!=-1:
-                                            print("exiting")
-                                            break
+                                        
+                                        torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')
+                                            
+                                        
+                                        
                                     if args.wandb:
                                         wandb.finish()
             
