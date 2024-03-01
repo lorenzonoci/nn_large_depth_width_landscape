@@ -154,7 +154,6 @@ def test(nets, metrics, num_classes, testloader, criterion, device, use_mse_loss
     total = 0
     correct_ens = 0
     total_ens = 0
-    #all_logits_correct = [ [] for e in range(len(nets))]
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(testloader):
             inputs, targets = inputs.to(device), targets.to(device)
@@ -163,10 +162,6 @@ def test(nets, metrics, num_classes, testloader, criterion, device, use_mse_loss
                 if use_mse_loss:
                     targets = torch.nn.functional.one_hot(targets, num_classes=num_classes).float()
                 outputs = net(inputs)
-                # get the logit 
-                #correct_logit = outputs[:,targets]
-                #all_logits_correct[e] += [ correct_logit ] 
-                #mean_logit += 1/len(nets) * outputs
                 loss = criterion(outputs, targets)
                 if torch.isnan(loss):
                     raise ValueError("Loss is nan, quitting training")
@@ -183,13 +178,41 @@ def test(nets, metrics, num_classes, testloader, criterion, device, use_mse_loss
             total_ens += targets.size(0)
             _,predict_ens = mean_logit.max(1)
             correct_ens += predict_ens.eq(t_max).sum().item()
-            #progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Ens Loss: %.3f | Acc: %.3f%% (%d/%d) | Ens Acc: %.3f%% (%d/%d)'
-            #         % (test_loss/(batch_idx+1), ens_test_loss/(batch_idx+1), 100.*correct/total, correct, total, 100.*correct_ens/total_ens, correct_ens, total_ens))
-            #progress_bar(batch_idx, len(testloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | Acc: %.3f%% (%d/%d) | Ens Acc: %.3f%% (%d/%d)'
-            #             % (test_loss/(batch_idx+1),ens_test_loss/(batch_idx+1),100.*correct/total, correct, total, 100.*correct_ens/total_ens, correct_ens, total_ens))
     metrics['test_loss'] += [test_loss/(batch_idx+1)]
     metrics['ens_test_loss'] += [ens_test_loss/(batch_idx+1)]
     metrics['test_acc'] += [100.*correct/total]
     metrics['ens_test_acc'] += [100.*correct_ens/total_ens]
     
     return metrics
+
+
+
+def eval(nets, num_classes, loader, criterion, device, use_mse_loss):
+    #from utils import progress_bar
+    global best_acc
+    for e,net in enumerate(nets):
+        net.eval()
+    tot_loss = 0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(loader):
+            inputs, targets = inputs.to(device), targets.to(device)
+            for e, net in enumerate(nets):
+                if use_mse_loss:
+                    targets = torch.nn.functional.one_hot(targets, num_classes=num_classes).float()
+                outputs = net(inputs)
+                loss = criterion(outputs, targets)
+                if torch.isnan(loss):
+                    raise ValueError("Loss is nan, quitting training")
+                    exit(1)
+                tot_loss += loss.item()/len(nets)
+                _, predicted = outputs.max(1)
+                total += targets.size(0)
+                if use_mse_loss:
+                    _, t_max = targets.max(1)
+                else:
+                    t_max = targets
+                correct += predicted.eq(t_max).sum().item()
+    
+    return tot_loss/(batch_idx+1), 100.*correct/total

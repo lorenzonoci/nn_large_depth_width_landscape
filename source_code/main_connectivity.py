@@ -6,7 +6,7 @@ import torch.nn as nn
 import random
 import wandb
 from utils import load_data, get_model, get_optimizers, process_args, set_parametr_args
-from train_test import train, test
+from train_test import train, test, eval
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
@@ -236,7 +236,7 @@ if __name__ == '__main__':
 
                                     E = args.num_ens
                                     # Set the random seed manually for reproducibility.
-                                    torch.manual_seed(args.seed1)
+                                    torch.manual_seed(args.seed)
                                     
                                     # Model
                                     print('==> Building model..')
@@ -251,24 +251,12 @@ if __name__ == '__main__':
 
                                     g = torch.Generator()
                                     g.manual_seed(args.seed1)
-
+                                    
                                     def seed_worker(worker_id):
                                         worker_seed = torch.initial_seed() % 2**32
                                         np.random.seed(worker_seed)
                                         random.seed(worker_seed)
-                                    
-                                    
-                                    # Get a large batch for hessian evaluations
-                                    b_size = args.batch_size
-                                    args.batch_size = 2048
-                                    trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
-                                    inputs, targets = next(iter(trainloader))
-                                    first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
-                                    if args.use_mse_loss:
-                                        first_targets = nn.functional.one_hot(first_targets, num_classes=args.num_classes).float()
-                                    args.batch_size = b_size
-                                    
-                                    
+                                        
                                     trainloader1, testloader1 = load_data(args, generator=g, seed_worker=seed_worker)
                                     
                                     
@@ -368,20 +356,20 @@ if __name__ == '__main__':
                                     
                                     nets[0].eval()
                                     
-                                    if args.eval_hessian:
-                                        top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
-                                        metrics["trace"] += [np.mean(trace)]
-                                        metrics["top_eig"] += [top_eigenvalues[-1]]
+                                    # if args.eval_hessian:
+                                    #     top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                    #     metrics["trace"] += [np.mean(trace)]
+                                    #     metrics["top_eig"] += [top_eigenvalues[-1]]
                                         
-                                    if args.top_eig_ggn:
-                                        top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
-                                        metrics["top_eig_ggn"] += [top_eig_ggn]
-                                        metrics["residual"] += [residual]
+                                    # if args.top_eig_ggn:
+                                    #     top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
+                                    #     metrics["top_eig_ggn"] += [top_eig_ggn]
+                                    #     metrics["residual"] += [residual]
                                         
-                                    if args.eval_hessian_random_features:
-                                        top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
-                                        metrics["trace_rf"] += [np.mean(trace)]
-                                        metrics["top_eig_rf"] += [top_eigenvalues[-1]]
+                                    # if args.eval_hessian_random_features:
+                                    #     top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                    #     metrics["trace_rf"] += [np.mean(trace)]
+                                    #     metrics["top_eig_rf"] += [top_eigenvalues[-1]]
                                     
                                     #exit()
                                     metrics_mc = []
@@ -402,32 +390,38 @@ if __name__ == '__main__':
                                         
                                         
                                         # interpolate
-                                        print("Interpolating...")
-                                        metrics_epoch = get_metrics_dict(hessian=False, hessian_rf=False)
-                                        for alpha in [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
-                                            d = {}
-                                            for (name1, param1), (name2, param2) in zip(model1.named_parameters(), model2.named_parameters()):
-                                                d[name1] = alpha*param1 + (1-alpha) * param2
-                                            eval_model = copy.deepcopy(model1)
-                                            eval_model.load_state_dict(d)
+                                        eval_every = 10
+                                        if epoch % eval_every == 0 or epoch == start_epoch+args.epochs - 1:
+                                            print("Interpolating...")
+                                            metrics_epoch = get_metrics_dict(hessian=False, hessian_rf=False)
+                                            model1.eval()
+                                            model2.eval()
+                                            with torch.no_grad():
+                                                for alpha in [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+                                                    d = {}
+                                                    for (name1, param1), (name2, param2) in zip(model1.named_parameters(), model2.named_parameters()):
+                                                        d[name1] = alpha*param1 + (1-alpha) * param2
+                                                    eval_model = copy.deepcopy(model1)
+                                                    eval_model.load_state_dict(d)
+                                                    
+                                                    metrics_epoch = test([eval_model], metrics_epoch, args.num_classes, testloader2, criterion, device, args.use_mse_loss)
+                                                    
+                                                    train_loss, train_acc = eval([eval_model], args.num_classes, trainloader1, criterion, device, args.use_mse_loss)
+                                                    metrics_epoch["train_loss"] += [train_loss]
+                                                    metrics_epoch['train_acc'] += [train_acc]
+                                                
+                                            print(metrics_epoch["test_loss"])    
+                                            print(metrics_epoch["train_loss"])
+                                            metrics_epoch["epoch"] = epoch
+                                        
+                                            metrics_mc.append(metrics_epoch)
                                             
-                                            metrics_epoch = test([eval_model], metrics_epoch, args.num_classes, testloader2, criterion, device, args.use_mse_loss)
-                                            first_inputs, first_targets = first_inputs.cuda(), first_targets.cuda()
-                                            outputs = eval_model(first_inputs)
-                                            loss = criterion(outputs, first_targets).item()
-                                            metrics_epoch["train_loss"] += [loss]
+                                            state = {
+                                                'metrics': metrics_mc,
+                                                'epoch': epoch
+                                            }
                                             
-                                        print(metrics_epoch["test_loss"])    
-                                        print(metrics_epoch["train_loss"])
-                                        
-                                        metrics_mc.append(metrics_epoch)
-                                        
-                                        state = {
-                                            'metrics': metrics_mc,
-                                            'epoch': epoch
-                                        }
-                                        
-                                        torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')
+                                            torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')
                                             
                                         
                                         
