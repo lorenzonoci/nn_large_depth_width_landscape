@@ -14,11 +14,42 @@ import torch
 import torchvision.transforms as transforms
 import torchvision
 from architectures.cifar_arch import ConvNet
+# from architectures.cifar_arch import ConvNetSP 
 #import architectures.resnet as resnet
 from optim_utils import MuSGD
 import torch.optim as optim
 import numpy as np
 from architectures.vit import ViT
+import glob
+from torchvision.io import read_image
+
+class CIFAR10SubsampledDataset(torch.utils.Dataset):
+    def __init__(self, root_dir, transform=None):
+        """
+        Args:
+            root_dir (string): Directory with all the images.
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.root_dir = root_dir
+        self.transform = transform
+        self.files = glob.glob(os.path.join(root_dir, '*/*.png'))
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        img_name = self.files[idx]
+        image = read_image(img_name)
+        label = int(os.path.basename(os.path.dirname(img_name)))
+
+        if self.transform:
+            image = self.transform(image)
+
+        return image, label
+
 
 
 def set_parametr_args(parametr, args=None):
@@ -29,14 +60,14 @@ def set_parametr_args(parametr, args=None):
         d["depth_scale_non_res_layers"] = False
         d["optimizer"] = 'adam' if 'adam' in args.optimizer else 'sgd'
         d["gamma"] = 'none'
-        
+
     elif parametr == 'mup':
         d["res_scaling_type"] = 'none'
         d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
         d["depth_scale_non_res_layers"] = False
         d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
         d["gamma"] = 'sqrt_width'
-        
+     
     elif parametr == 'mup_sqrt_depth':
         d["res_scaling_type"] = 'sqrt_depth'
         d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
@@ -243,7 +274,39 @@ def load_data(args, generator=None, seed_worker=None):
             root=args.data_path, train=False, transform=transform_test, download=True)
         testloader = torch.utils.data.DataLoader(
             testset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.test_num_workers, generator=generator, worker_init_fn = seed_worker)
-        
+    elif args.dataset == "cifar10_5000":
+        if not args.no_data_augm:
+            print("Using data augmentation")
+            transform_train = transforms.Compose([
+                    transforms.Resize((32,32)), 
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(), 
+                    transforms.RandomRotation(10),
+                    transforms.ToTensor(), 
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+        else:
+            print("NOT using data augmentation")
+            transform_train = transforms.Compose([
+                    transforms.Resize((32,32)),
+                    transforms.ToTensor(), 
+                    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+            ])
+        transform_test = transforms.Compose([transforms.Resize((32,32)),
+                            transforms.ToTensor(),
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                            ])
+        trainset = CIFAR10SubsampledDataset(
+            root=args.data_path, transform=transform_train)
+
+        trainloader = torch.utils.data.DataLoader(
+            trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, generator=generator, worker_init_fn = seed_worker)
+
+        testset = torchvision.datasets.CIFAR10( 
+            root=args.data_path, train=False, transform=transform_test, download=True)
+        testloader = torch.utils.data.DataLoader(
+            testset, batch_size=args.test_batch_size, shuffle=False, num_workers=args.test_num_workers, generator=generator, worker_init_fn = seed_worker)
+      
               
     elif args.dataset == "tiny_imgnet":
         

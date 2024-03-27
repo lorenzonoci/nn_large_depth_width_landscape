@@ -27,9 +27,10 @@ if __name__ == '__main__':
     '''
     PyTorch implementation of various parametrizations for neural networks.
     ''', formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--parametr', type=str, default='none', choices=['sp', 'mup', 'mup_sqrt_depth', 'mup_depth', 'none'],help=
+    parser.add_argument('--parametr', type=str, default='none', choices=['dsp', 'sp', 'mup', 'mup_sqrt_depth', 'mup_depth', 'none'],help=
                         '''
                         set all the parameters required for a specified parametrization. 
+                        0. dsp: mup width without residual branches
                         1. sp: standard parametrization
                         2. mup: mup parametrization (rescale last layer by 1/sqrt(width) and learning rate by width)
                         3. mup_sqrt_depth: in addition to mup, also scale residual branches by 1/sqrt{depth}
@@ -48,7 +49,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_dir', type=str, default='test/',
                     help='file location to save results')
     parser.add_argument('--res_scaling_type', type=str, default='none')
-    parser.add_argument('--data_path', type=str, default='./')
+    parser.add_argument('--data_path', type=str, default='/is/cluster/fast/ameterez/datasets')
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--depth_mult', type=int, default=1)
     parser.add_argument('--skip_scaling', type=float, default=1,

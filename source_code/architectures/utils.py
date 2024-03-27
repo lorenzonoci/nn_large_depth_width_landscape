@@ -42,6 +42,29 @@ def get_width_scaling(tensor, nonlinearity='linear', a=1):
     return gain / math.sqrt(fan_in)
 
 
+class ScaledLayerSP(nn.Module):
+    def __init__(self, layer, sigma_init=1.0, depth_scale=1.0, gamma=1.0, requires_grad=True, nonlinearity='linear', base_width=1.0):
+        super().__init__()
+        self.layer = layer
+        self.scaling = get_width_scaling(layer.weight, nonlinearity=nonlinearity) * depth_scale * base_width
+        self.std_init = sigma_init
+        self.gamma = gamma
+        self.reset_parameters()
+        self._requires_grad(requires_grad)
+        
+    def forward(self, x):
+        return self.layer(x)
+    
+    def reset_parameters(self) -> None:
+        with torch.no_grad():
+            if self.layer.bias is not None:
+                init.zeros_(self.layer.bias)
+            self.layer.weight.normal_(0, get_width_scaling(self.layer.weight))
+            
+    def _requires_grad(self, requires_grad):
+        self.layer.weight.requires_grad = requires_grad
+        if self.layer.bias is not None:
+            self.layer.bias.requires_grad = requires_grad
 
 class ScaledLayer(nn.Module):
     def __init__(self, layer, sigma_init=1.0, depth_scale=1.0, gamma=1.0, requires_grad=True, nonlinearity='linear', base_width=1.0):

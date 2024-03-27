@@ -3,3 +3,6 @@ runs/
 __pycache__/
 data/
 test/
+*.pdf
+.ipynb_checkpoints/
+subsampled_cifar10_train/
