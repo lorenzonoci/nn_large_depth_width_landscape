@@ -10,16 +10,16 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, ntk_eigenvalues
 import json
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}".format(
+    return "model_{}/optimizer{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}/base_shape_{}".format(
         args.arch, args.optimizer, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block)
+        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.base_shape)
     
 if __name__ == '__main__':
 
@@ -101,6 +101,8 @@ if __name__ == '__main__':
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
+    parser.add_argument('--ntk_eigs', type=int, default=0)
+    parser.add_argument('--base_shape', type=int, default=1)
     args = parser.parse_args()
     
     
@@ -188,7 +190,7 @@ if __name__ == '__main__':
                                         args.num_classes = 1000 
                                     elif args.dataset == "tiny_imgnet":
                                         args.num_classes = 200
-                                    elif args.dataset == "cifar10":
+                                    elif args.dataset == "cifar10" or args.dataset=='cifar10_5000':
                                         args.num_classes = 10
                                     else:
                                         raise ValueError()
@@ -337,7 +339,7 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn)
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, ntk_eigs=args.ntk_eigs)
                                     
                                     nets[0].eval()
                                     
@@ -350,6 +352,11 @@ if __name__ == '__main__':
                                         top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
                                         metrics["top_eig_ggn"] += [top_eig_ggn]
                                         metrics["residual"] += [residual]
+
+                                    if args.ntk_eigs > 0:
+                                        top_ntk_eigs = ntk_eigenvalues(nets[0], first_inputs, first_targets, args.ntk_eigs)
+                                        for i in range(args.ntk_eigs):
+                                            metrics[f"ntk_eig_{i}"] += [top_ntk_eigs[i].item()]
                                         
                                     if args.eval_hessian_random_features:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
@@ -361,7 +368,7 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, ntk_eigs=args.ntk_eigs)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')

@@ -6,7 +6,7 @@ import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from torch.nn.functional import one_hot
 
-def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False):
+def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, ntk_eigs=0):
     metrics = []
     metrics_dict = {}
     c = False
@@ -19,6 +19,11 @@ def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False):
     if top_eig_ggn:
         metrics.extend(["top_eig_ggn", "residual"])
         c = True
+    if ntk_eigs > 0:
+        for i in range(ntk_eigs):
+            metrics.extend([f"ntk_eig_{i}"])
+        c = True
+    
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
 
@@ -171,7 +176,13 @@ def residual_and_top_eig_ggn(model, inputs, targets, use_mse_loss):
         outputs = torch.softmax(outputs, dim=1)
     residual = (outputs - one_hot(targets)).norm(dim=1).mean(dim=0).item()
     return top_eig_ggn, residual
-    
+
+def ntk_eigenvalues(model, inputs, targets, num_eigs): 
+    inputs = inputs.cuda()
+    targets = targets.cuda()
+    # very important: cross_entropy always set to FALSE!
+    ntk_eigenvalues = kernel_eigenvalues(model, inputs, cross_entropy=False, print_progress=False, top_n=num_eigs)
+    return ntk_eigenvalues
 
 def ntk_features(fnet, params, x):
     def fnet_single(params, x):

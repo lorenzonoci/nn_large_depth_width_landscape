@@ -21,18 +21,18 @@ import torch.optim as optim
 import numpy as np
 from architectures.vit import ViT
 import glob
-from torchvision.io import read_image
+from PIL import Image
 
-class CIFAR10SubsampledDataset(torch.utils.Dataset):
-    def __init__(self, root_dir, transform=None):
+class CIFAR10SubsampledDataset(torch.utils.data.Dataset):
+    def __init__(self, root, transform=None):
         """
         Args:
             root_dir (string): Directory with all the images.
             transform (callable, optional): Optional transform to be applied on a sample.
         """
-        self.root_dir = root_dir
+        self.root_dir = root
         self.transform = transform
-        self.files = glob.glob(os.path.join(root_dir, '*/*.png'))
+        self.files = glob.glob(os.path.join(self.root_dir, '*/*.png'))
 
     def __len__(self):
         return len(self.files)
@@ -42,7 +42,7 @@ class CIFAR10SubsampledDataset(torch.utils.Dataset):
             idx = idx.tolist()
 
         img_name = self.files[idx]
-        image = read_image(img_name)
+        image = Image.open(img_name)
         label = int(os.path.basename(os.path.dirname(img_name)))
 
         if self.transform:
@@ -67,7 +67,7 @@ def set_parametr_args(parametr, args=None):
         d["depth_scale_non_res_layers"] = False
         d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
         d["gamma"] = 'sqrt_width'
-     
+    
     elif parametr == 'mup_sqrt_depth':
         d["res_scaling_type"] = 'sqrt_depth'
         d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
@@ -140,19 +140,18 @@ def process_args(args):
 
 
 def get_model(arch, width, depth, args):
-    
     if arch == "conv" and args.dataset == "imgnet":
         net = ConvNet(width=width, n_blocks=depth, gamma=args.gamma, 
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
                       beta=args.beta, gamma_zero=args.gamma_zero, num_classes=args.num_classes, img_dim = 224, norm=args.norm,
                       non_lin_first=True, layers_per_block=args.layers_per_block, sigma_last_layer_per_block=args.sigma_last_layer_per_block,
                       init_stride=2, depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)    
-    elif arch == "conv" and args.dataset == "cifar10":
+    elif arch == "conv" and (args.dataset == "cifar10" or args.dataset == 'cifar10_5000'):
         net = ConvNet(width=width, n_blocks=depth,  gamma=args.gamma, 
                       res_scaling=args.res_scaling, skip_scaling=args.skip_scaling,
                       beta=args.beta, gamma_zero=args.gamma_zero, num_classes=args.num_classes, norm=args.norm, layers_per_block=args.layers_per_block,
                       non_lin_first=True, sigma_last_layer_per_block=args.sigma_last_layer_per_block, init_stride=2,
-                      depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
+                      depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout, base_shape=args.base_shape)
         
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 
@@ -190,8 +189,8 @@ def get_lr(net, args):
     elif args.depth_scale_lr == "depth":
         lr = lr * args.depth
     return lr
-    
-    
+ 
+ 
 def get_optimizers(nets, args):
     
     if args.optimizer == 'musgd':
@@ -297,10 +296,9 @@ def load_data(args, generator=None, seed_worker=None):
                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
                             ])
         trainset = CIFAR10SubsampledDataset(
-            root=args.data_path, transform=transform_train)
+            root="/home/ameterez/work/nn_large_depth_width_landscape/source_code/subsampled_cifar10_train", transform=transform_train)
 
-        trainloader = torch.utils.data.DataLoader(
-            trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, generator=generator, worker_init_fn = seed_worker)
+        trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, generator=generator, worker_init_fn = seed_worker)
 
         testset = torchvision.datasets.CIFAR10( 
             root=args.data_path, train=False, transform=transform_test, download=True)

@@ -1,7 +1,7 @@
 import wandb
 import torch
 import sys
-from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn
+from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, ntk_eigenvalues
 from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict
 from pyhessian import hessian
 import numpy as np
@@ -10,7 +10,7 @@ from asdl.kernel import kernel_eigenvalues
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False):
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, ntk_eigs=0):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -47,8 +47,8 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 
             mean_logit += 1.0/E * outputs
             loss = criterion(outputs, targets)
-            # if torch.isnan(loss):
-            #     raise ValueError("Loss is nan, quitting training")
+            if torch.isnan(loss):
+                raise ValueError("Loss is nan, quitting training")
             
             loss.backward()
             optimizers[e].step()
@@ -67,7 +67,7 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
         _,predict_ens = mean_logit.max(1)
         correct_ens += predict_ens.eq(t_max).sum().item()
         
-        if batches_seen % compute_every == 0 and batches_seen > 0:
+        if batches_seen % compute_every == 0: #and batches_seen > 0:
             print("train_loss: {}, {}".format(train_loss/(compute_every), len(targets)))
             metrics['train_loss'] += [train_loss/compute_every]
             metrics['ens_train_loss'] += [ens_train_loss/compute_every]
@@ -86,7 +86,10 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], eval_inputs, eval_targets, use_mse_loss)
                 metrics['residual'] += [residual]
                 metrics['top_eig_ggn'] += [top_eig_ggn]
-            
+            if ntk_eigs > 0:
+                top_ntk_eigs = ntk_eigenvalues(nets[0], eval_inputs, eval_targets, ntk_eigs)
+                for i in range(ntk_eigs):
+                    metrics[f"ntk_eig_{i}"] += [top_ntk_eigs[i].item()] 
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             
             # if not use_mse_loss:
