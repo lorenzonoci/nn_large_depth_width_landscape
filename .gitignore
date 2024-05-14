@@ -1,5 +1,5 @@
 tmp/
-runs/
+runs*/
 __pycache__/
 data/
 test/
