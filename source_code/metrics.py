@@ -6,7 +6,7 @@ import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from torch.nn.functional import one_hot
 
-def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False):
+def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False):
     metrics = []
     metrics_dict = {}
     c = False
@@ -18,6 +18,9 @@ def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False):
         c = True  
     if top_eig_ggn:
         metrics.extend(["top_eig_ggn", "residual"])
+        c = True
+    if top_k_dir_sharp:
+        metrics.extend(["top_k_dir_sharp"])
         c = True
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
@@ -180,6 +183,31 @@ def ntk_features(fnet, params, x):
     jac1 = vmap(jacrev(fnet_single), (None, 0))(params, x)
     jac1 = torch.concat([jac.flatten(2) for jac in jac1], dim=-1) # flatten to n_samples x n_classes x n_parameters per layer
     return jac1.mean(1) # mean over classes
+
+
+
+def top_k_dir_sharpness(gradient, model, criterion, inputs, targets, top_k=10, cuda=True):
+    hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
+    top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=top_k)
+
+    # normalize gradient    
+    g = gradient/gradient.norm()
+    
+    es = []
+    for e in top_eigenvectors:
+        ne = torch.cat([v.flatten() for v in e], dim=0) # get each eigenvector of size n_parameters
+        es.append(ne)
+    eigvals_mat = torch.diag(torch.tensor(top_eigenvalues).to("cuda"))
+    
+    g_proj = torch.tensor([g@es[i]for i in range(top_k)]).to("cuda")
+    
+    dir_sharp = g_proj@eigvals_mat@g_proj
+    return dir_sharp.item()
+
+
+def get_gradients(net):
+    grads = [p.grad.flatten() for p in net.parameters()]
+    return torch.cat(grads, dim=0)
 
 
 def hessian_trace_and_top_eig_rf(model, criterion, inputs, targets, cuda=True):

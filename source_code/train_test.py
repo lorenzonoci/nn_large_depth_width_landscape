@@ -1,7 +1,7 @@
 import wandb
 import torch
 import sys
-from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn
+from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, get_gradients, top_k_dir_sharpness
 from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict
 from pyhessian import hessian
 import numpy as np
@@ -10,7 +10,7 @@ from asdl.kernel import kernel_eigenvalues
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False):
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -72,6 +72,11 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             metrics['train_loss'] += [train_loss/compute_every]
             metrics['ens_train_loss'] += [ens_train_loss/compute_every]
 
+            if get_top_k_dir_sharpness:
+                gs = get_gradients(nets[0])
+                s = top_k_dir_sharpness(gs, nets[0], criterion, inputs=eval_inputs, targets=eval_targets, top_k=10)
+                metrics['top_k_dir_sharp'] += [s]
+                
             optimizers[0].zero_grad()
             nets[0].eval()
             if eval_hessian_random_features:
@@ -86,7 +91,7 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], eval_inputs, eval_targets, use_mse_loss)
                 metrics['residual'] += [residual]
                 metrics['top_eig_ggn'] += [top_eig_ggn]
-            
+                
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             
             # if not use_mse_loss:

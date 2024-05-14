@@ -10,7 +10,7 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, get_gradients
 import json
 
 wandb_project_name = 'mse large batch'
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
+    parser.add_argument('--get_top_k_dir_sharp', action='store_true')
     args = parser.parse_args()
     
     
@@ -336,7 +337,7 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn)
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp)
                                     
                                     nets[0].eval()
                                     
@@ -354,13 +355,18 @@ if __name__ == '__main__':
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace_rf"] += [np.mean(trace)]
                                         metrics["top_eig_rf"] += [top_eigenvalues[-1]]
+                                        
+                                    # if args.get_top_k_dir_sharp:
+                                    #     gs = get_gradients(nets[0])
+                                    #     s = top_k_dir_sharpness(gs, nets[0], criterion, inputs=first_inputs, targets=first_targets, top_k=10)
+                                    #     metrics['top_k_dir_sharp'] += [s]
                                     
                                     #exit()
                                     batches_seen = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
