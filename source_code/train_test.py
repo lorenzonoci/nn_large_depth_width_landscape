@@ -72,12 +72,15 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             metrics['train_loss'] += [train_loss/compute_every]
             metrics['ens_train_loss'] += [ens_train_loss/compute_every]
 
+            optimizers[0].zero_grad()
+            nets[0].eval()
+            
             if get_top_k_dir_sharpness:
                 ks = [1, 2, 4, 6, 8, 10]
                 kmax = max(ks)
-                hessian_comp = hessian(nets[0], criterion, data=(inputs, targets), cuda=True)
+                hessian_comp = hessian(nets[0], criterion, data=(eval_inputs, eval_targets), cuda=True)
                 gs = process_gradients(hessian_comp.gradsH)
-                top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax) 
+                top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax, maxIter=2000, tol=0.000001) 
                 top_eigenvectors = process_eigenvectors(top_eigenvectors)
                 proj_g = get_projected_gradients(gs, top_eigenvectors)
                 for k in ks:
@@ -85,12 +88,11 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                     s1 = top_k_hessian_alignment(proj_g, gs, k)
                     metrics[f'top_{k}_dir_sharp'] += [s]
                     metrics[f'top_{k}_hessian_alignment'] += [s1]
-                    print(f"{k} dir sharp: {s} ")
+                    #print(f"{k} dir sharp: {s}")
                     print(f"{k} alignment {s1}")
                 
                 
-            optimizers[0].zero_grad()
-            nets[0].eval()
+           
             if eval_hessian_random_features:
                 top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
                 metrics["trace_rf"] += [np.mean(trace)]

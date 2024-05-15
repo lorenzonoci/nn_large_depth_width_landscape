@@ -247,7 +247,7 @@ if __name__ == '__main__':
                                     
                                     # Get a large batch for hessian evaluations
                                     b_size = args.batch_size
-                                    args.batch_size = 2048
+                                    args.batch_size = 1024
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                     inputs, targets = next(iter(trainloader))
                                     first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)

@@ -205,7 +205,7 @@ def process_eigenvectors(eigenvectors):
         
 def top_k_hessian_alignment(projected_gradients, gradients, k):
     projected_gradients = projected_gradients[:k]
-    dir_sharp = projected_gradients@projected_gradients / gradients.norm()**2
+    dir_sharp = projected_gradients.norm()**2 / gradients.norm()**2
     
     return dir_sharp.item()
 

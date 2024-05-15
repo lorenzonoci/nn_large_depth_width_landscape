@@ -236,6 +236,8 @@ def load_data(args, generator=None, seed_worker=None):
                             ])
         trainset = torchvision.datasets.CIFAR10(
             root=args.data_path, train=True, transform=transform_train, download=True)
+        #trainset = torch.utils.data.Subset(trainset, list(range(0, 1024)))
+        
         trainloader = torch.utils.data.DataLoader(
             trainset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, generator=generator, worker_init_fn = seed_worker)
 
