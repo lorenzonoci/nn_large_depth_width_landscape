@@ -10,7 +10,7 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, get_gradients
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness
 import json
 
 wandb_project_name = 'mse large batch'
@@ -247,12 +247,12 @@ if __name__ == '__main__':
                                     
                                     # Get a large batch for hessian evaluations
                                     b_size = args.batch_size
-                                    args.batch_size = 1024
+                                    args.batch_size = 2048
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                     inputs, targets = next(iter(trainloader))
                                     first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
                                     if args.use_mse_loss:
-                                        first_targets = nn.functional.one_hot(first_targets, num_classes=args.num_classes).float()
+                                        first_targets = nn.functionals.one_hot(first_targets, num_classes=args.num_classes).float()
                                     args.batch_size = b_size
                                     
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)

@@ -1,7 +1,7 @@
 import wandb
 import torch
 import sys
-from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, get_gradients, top_k_dir_sharpness
+from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, top_k_dir_sharpness, top_k_hessian_alignment, process_gradients, get_projected_gradients, process_eigenvectors
 from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict
 from pyhessian import hessian
 import numpy as np
@@ -73,9 +73,21 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             metrics['ens_train_loss'] += [ens_train_loss/compute_every]
 
             if get_top_k_dir_sharpness:
-                gs = get_gradients(nets[0])
-                s = top_k_dir_sharpness(gs, nets[0], criterion, inputs=eval_inputs, targets=eval_targets, top_k=10)
-                metrics['top_k_dir_sharp'] += [s]
+                ks = [1, 2, 4, 6, 8, 10]
+                kmax = max(ks)
+                hessian_comp = hessian(nets[0], criterion, data=(inputs, targets), cuda=True)
+                gs = process_gradients(hessian_comp.gradsH)
+                top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax) 
+                top_eigenvectors = process_eigenvectors(top_eigenvectors)
+                proj_g = get_projected_gradients(gs, top_eigenvectors)
+                for k in ks:
+                    s = top_k_dir_sharpness(proj_g, gs, k, top_eigenvalues)
+                    s1 = top_k_hessian_alignment(proj_g, gs, k)
+                    metrics[f'top_{k}_dir_sharp'] += [s]
+                    metrics[f'top_{k}_hessian_alignment'] += [s1]
+                    print(f"{k} dir sharp: {s} ")
+                    print(f"{k} alignment {s1}")
+                
                 
             optimizers[0].zero_grad()
             nets[0].eval()
@@ -104,7 +116,9 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
                 d_log = {
                     'train_loss': train_loss/compute_every,
                     'train_acc': 100.*correct/total,
-                    'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr']
+                    'lr': schedulers[0].get_last_lr()[0] if len(schedulers)>0 else optimizers[0].param_groups[0]['lr'],
+                    'top_10_hessian_alignment': metrics[f'top_10_hessian_alignment'][-1],
+                    'sharpness': metrics["top_eig"][-1]
                     }
                 # else:
                 #     d_log = {

@@ -20,7 +20,10 @@ def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir
         metrics.extend(["top_eig_ggn", "residual"])
         c = True
     if top_k_dir_sharp:
-        metrics.extend(["top_k_dir_sharp"])
+        ks = [1, 2, 4, 6, 8, 10]
+        for k in ks:
+            metrics.extend([f"top_{k}_dir_sharp"])
+            metrics.extend([f"top_{k}_hessian_alignment"])
         c = True
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
@@ -185,28 +188,41 @@ def ntk_features(fnet, params, x):
     return jac1.mean(1) # mean over classes
 
 
-
-def top_k_dir_sharpness(gradient, model, criterion, inputs, targets, top_k=10, cuda=True):
-    hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
-    top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=top_k)
-
-    # normalize gradient    
-    g = gradient/gradient.norm()
+def get_projected_gradients(gradient, eigenvectors):
+    g_proj = torch.tensor([gradient@eigenv for eigenv in eigenvectors]).to("cuda")
+    return g_proj
+    
+    
+def process_eigenvectors(eigenvectors):
     
     es = []
-    for e in top_eigenvectors:
+    for e in eigenvectors:
         ne = torch.cat([v.flatten() for v in e], dim=0) # get each eigenvector of size n_parameters
         es.append(ne)
-    eigvals_mat = torch.diag(torch.tensor(top_eigenvalues).to("cuda"))
+    return es
+
+     
+        
+def top_k_hessian_alignment(projected_gradients, gradients, k):
+    projected_gradients = projected_gradients[:k]
+    dir_sharp = projected_gradients@projected_gradients / gradients.norm()**2
     
-    g_proj = torch.tensor([g@es[i]for i in range(top_k)]).to("cuda")
-    
-    dir_sharp = g_proj@eigvals_mat@g_proj
     return dir_sharp.item()
 
 
-def get_gradients(net):
-    grads = [p.grad.flatten() for p in net.parameters()]
+def top_k_dir_sharpness(projected_gradients, gradients, k, top_eigs):
+    # normalize gradient    
+    projected_gradients = projected_gradients[:k]
+    g = projected_gradients/gradients.norm()
+    
+    eigvals_mat = torch.diag(torch.tensor(top_eigs[:k]).to("cuda"))
+    dir_sharp = g@eigvals_mat@g
+    
+    return dir_sharp.item()
+
+
+def process_gradients(grads):
+    grads = [g.flatten() for g in grads]
     return torch.cat(grads, dim=0)
 
 
