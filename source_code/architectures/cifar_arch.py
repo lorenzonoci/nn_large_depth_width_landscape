@@ -276,10 +276,10 @@ class SimpleConvNet(nn.Module):
         
         self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=2, padding=1, bias=bias), sigma_init=sigma_init, base_width=base_width)
         self.act1 = nn.ReLU()
-        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, padding=1, bias=bias, stride=2), sigma_init=sigma_init, base_width=base_width)
+        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, padding=1, bias=bias, stride=4), sigma_init=sigma_init, base_width=base_width)
         self.act2 = nn.ReLU()
         
-        final_size =  self.img_dim//16 
+        final_size =  self.img_dim//32
         self.final_width = int(final_size**2 * width)
         self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
         self.gamma = self.gamma * self.gamma_zero
