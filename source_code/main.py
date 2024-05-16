@@ -17,9 +17,9 @@ wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}".format(
+    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}/width_{}".format(
         args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block)
+        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width)
     
 if __name__ == '__main__':
 
@@ -102,6 +102,7 @@ if __name__ == '__main__':
     parser.add_argument('--top_eig_ggn', action='store_true')
     parser.add_argument('--top_hessian_eigvals', type=int, default=1)
     parser.add_argument('--get_top_k_dir_sharp', action='store_true')
+    parser.add_argument('--width', type=int, default=-1)
     args = parser.parse_args()
     
     
