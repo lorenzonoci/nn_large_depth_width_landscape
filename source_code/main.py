@@ -17,8 +17,8 @@ wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}".format(
-        args.arch, args.optimizer, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
+    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}".format(
+        args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
         args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block)
     
 if __name__ == '__main__':
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
+    parser.add_argument('--top_hessian_eigvals', type=int, default=1)
     parser.add_argument('--get_top_k_dir_sharp', action='store_true')
     args = parser.parse_args()
     
@@ -337,15 +338,18 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp)
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp, top_hessian_eigvals=args.top_hessian_eigvals)
                                     
                                     nets[0].eval()
                                     
                                     if args.eval_hessian:
-                                        top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, cuda=True)
+                                        top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, top_n=args.top_hessian_eigvals, cuda=True)
                                         metrics["trace"] += [np.mean(trace)]
-                                        metrics["top_eig"] += [top_eigenvalues[-1]]
-                                        
+                                        if args.top_hessian_eigvals == 1:
+                                            metrics["top_eig"] += [top_eigenvalues[-1]]
+                                        else:
+                                            for i in range(args.top_hessian_eigvals):
+                                                metrics[f"top_eig_{i}"] += [top_eigenvalues[i]] 
                                     if args.top_eig_ggn:
                                         top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
                                         metrics["top_eig_ggn"] += [top_eig_ggn]

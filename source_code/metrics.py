@@ -6,12 +6,17 @@ import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from torch.nn.functional import one_hot
 
-def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False):
+def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False, top_hessian_eigvals=1):
     metrics = []
     metrics_dict = {}
     c = False
     if hessian:
-        metrics.extend(["trace", "top_eig"])
+        metrics.extend(['trace'])
+        if top_hessian_eigvals == 1:
+            metrics.extend(["top_eig"])
+        else:
+            for i in range(top_hessian_eigvals):
+                metrics.extend([f"top_eig_{i}"]) 
         c = True
     if hessian_rf:
         metrics.extend(["trace_rf", "top_eig_rf"])
@@ -20,10 +25,10 @@ def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir
         metrics.extend(["top_eig_ggn", "residual"])
         c = True
     if top_k_dir_sharp:
-        ks = [1, 2, 4, 6, 8, 10]
-        for k in ks:
-            metrics.extend([f"top_{k}_dir_sharp"])
-            metrics.extend([f"top_{k}_hessian_alignment"])
+        # ks = [1, 2, 4, 6, 8, 10]
+        # for k in ks:
+            # metrics.extend([f"top_{k}_dir_sharp"])
+        metrics.extend([f"directional_sharpness"])
         c = True
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
@@ -162,9 +167,9 @@ def fnet_single(model, params, x):
     return functional_call(model, params, (x.unsqueeze(0),)).squeeze(0)
 
 
-def hessian_trace_and_top_eig(model, criterion, inputs, targets, cuda=True):
+def hessian_trace_and_top_eig(model, criterion, inputs, targets, top_n=1, cuda=True):
     hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
-    top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=1)
+    top_eigenvalues, _ = hessian_comp.eigenvalues(top_n=top_n)
     trace = hessian_comp.trace()
     return top_eigenvalues, trace
 
@@ -225,6 +230,17 @@ def process_gradients(grads):
     grads = [g.flatten() for g in grads]
     return torch.cat(grads, dim=0)
 
+def directional_sharpness(gradients, model, inputs):
+    # import pdb
+    # pdb.set_trace()
+    # gradients = [g/g.norm() for g in gradients]
+    # gradients is num_layers tensors
+
+    # now do hvp
+    Hg = torch.autograd.functional.hvp(model, inputs, gradients)
+    dir_sharpnes = gradients @ Hg
+
+    return dir_sharpnes
 
 def hessian_trace_and_top_eig_rf(model, criterion, inputs, targets, cuda=True):
     for name, param in model.named_parameters():

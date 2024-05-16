@@ -14,7 +14,7 @@ class BlockLayer(nn.Module):
             raise ValueError()
         self.sigma_init = sigma_init
         
-        conv = ScaledLayer(nn.Conv2d(fan_in, fan_out, kernel_size=kernel_size, stride=stride, padding=1, bias=bias), sigma_init=self.sigma_init, requires_grad=learnable, base_width=base_width)
+        conv = ScaledLayer(nn.Conv2d(fan_in, fan_out, kernel_size=kernel_size, stride=stride, padding=1, bias=bias), sigma_init=self.sigma_init, requires_grad=learnable, base_width=base_width, nonlinearity=nonlinearity)
         norm = get_norm_layer(fan_out, norm)
         self.non_lin_first = non_lin_first
         # TODO: check order of operations (especially normalization layers)

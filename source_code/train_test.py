@@ -2,15 +2,15 @@ import wandb
 import torch
 import sys
 from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, top_k_dir_sharpness, top_k_hessian_alignment, process_gradients, get_projected_gradients, process_eigenvectors
-from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict
+from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict, directional_sharpness
 from pyhessian import hessian
 import numpy as np
 from asdl.kernel import kernel_eigenvalues
-
+from pyhessian import get_params_grad, hessian_vector_product, normalization, group_product
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False):
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False, top_hessian_eigvals=10):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -76,31 +76,41 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             nets[0].eval()
             
             if get_top_k_dir_sharpness:
-                ks = [1, 2, 4, 6, 8, 10]
-                kmax = max(ks)
+                # ks = [1, 2, 4, 6, 8, 10]
+                # kmax = max(ks)
                 hessian_comp = hessian(nets[0], criterion, data=(eval_inputs, eval_targets), cuda=True)
-                gs = process_gradients(hessian_comp.gradsH)
-                top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax, maxIter=2000, tol=0.000001) 
-                top_eigenvectors = process_eigenvectors(top_eigenvectors)
-                proj_g = get_projected_gradients(gs, top_eigenvectors)
-                for k in ks:
-                    s = top_k_dir_sharpness(proj_g, gs, k, top_eigenvalues)
-                    s1 = top_k_hessian_alignment(proj_g, gs, k)
-                    metrics[f'top_{k}_dir_sharp'] += [s]
-                    metrics[f'top_{k}_hessian_alignment'] += [s1]
-                    #print(f"{k} dir sharp: {s}")
-                    print(f"{k} alignment {s1}")
-                
-                
+                # gs = process_gradients(hessian_comp.gradsH)
+                # top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax, maxIter=1000, tol=1e-5) 
+                # top_eigenvectors = process_eigenvectors(top_eigenvectors)
+                # proj_g = get_projected_gradients(gs, top_eigenvectors)
+                # for k in ks:
+                #     s = top_k_dir_sharpness(proj_g, gs, k, top_eigenvalues)
+                #     s1 = top_k_hessian_alignment(proj_g, gs, k)
+                #     # metrics[f'top_{k}_dir_sharp'] += [s]
+                #     metrics[f'top_{k}_hessian_alignment'] += [s1]
+                #     #print(f"{k} dir sharp: {s}")
+                #     # print(f"{k} alignment {s1}")
+                # import pdb
+                # pdb.set_trace()
+                params, grads = get_params_grad(nets[0])
+                grads = normalization(grads)
+                Hv = hessian_vector_product(grads, params, grads)
+                vHv = group_product(grads, Hv)
+                metrics['directional_sharpness'] += [vHv.item()]
+                print(metrics['directional_sharpness'])
            
             if eval_hessian_random_features:
                 top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
                 metrics["trace_rf"] += [np.mean(trace)]
                 metrics["top_eig_rf"] += [top_eigenvalues[-1]]
             if eval_hessian:
-                top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
+                top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, top_n=top_hessian_eigvals, cuda=True)
                 metrics["trace"] += [np.mean(trace)]
-                metrics["top_eig"] += [top_eigenvalues[-1]]
+                if top_hessian_eigvals == 1:
+                    metrics["top_eig"] += [top_eigenvalues[-1]]
+                else:
+                    for i in range(top_hessian_eigvals):
+                        metrics[f"top_eig_{i}"] += [top_eigenvalues[i]]
             if top_eig_ggn:
                 top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], eval_inputs, eval_targets, use_mse_loss)
                 metrics['residual'] += [residual]
