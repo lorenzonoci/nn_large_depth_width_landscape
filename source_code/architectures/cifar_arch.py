@@ -260,4 +260,52 @@ class ConvNet(nn.Module):
     def get_module_classes_to_log(self):
         #(ScaledResidualBranch, ScaledLayer)
         return (ScaledResidualBranch,)
+    
+    
+    
+    
+class SimpleConvNet(nn.Module):
+    def __init__(self, width, gamma_zero=1, num_classes=10, img_dim=32, zero_init_readout=False,  gamma='sqrt_width', bias=None, base_width=1.0, sigma_init=1):
+        super().__init__()
+        
+
+        self.gamma_zero = gamma_zero
+        self.img_dim = img_dim
+        self.zero_init_readout = zero_init_readout
+
+        
+        self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=2, padding=1, bias=bias), sigma_init=sigma_init, base_width=base_width)
+        self.act1 = nn.ReLU()
+        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, padding=1, bias=bias, stride=4), sigma_init=sigma_init, base_width=base_width)
+        self.act2 = nn.ReLU()
+        
+        final_size =  self.img_dim//32
+        self.final_width = int(final_size**2 * width)
+        self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
+        self.gamma = self.gamma * self.gamma_zero
+        
+        sigma_init = 0.0 if self.zero_init_readout else 1.0
+        self.fc = ScaledLayer(nn.Linear(self.final_width, num_classes, bias=bias), sigma_init=sigma_init, gamma=self.gamma)
+                
+    def forward(self, x):
+        x = self.conv01(x)
+        x = self.act1(x)
+        x = F.max_pool2d(x, 2, 2) 
+        
+        x = self.conv02(x)
+        x = self.act2(x)
+        x = F.max_pool2d(x, 2, 2)
+        
+        x = x.view(-1, self.final_width)
+        x = self.fc(x)
+        
+        return x
+    
+    def set_to_lazy(self):
+        pass
+            
+            
+    def get_module_classes_to_log(self):
+        #(ScaledResidualBranch, ScaledLayer)
+        return ()
 

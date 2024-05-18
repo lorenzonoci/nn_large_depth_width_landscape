@@ -13,7 +13,7 @@ import torch.nn.init as init
 import torch
 import torchvision.transforms as transforms
 import torchvision
-from architectures.cifar_arch import ConvNet
+from architectures.cifar_arch import ConvNet, SimpleConvNet
 #import architectures.resnet as resnet
 from optim_utils import MuSGD
 import torch.optim as optim
@@ -77,20 +77,13 @@ def get_depth(model_name, depth_mult):
     return depth
                     
 def process_args(args):
-    # if args.arch == "conv":
-    #     args.depth = int(3 * args.depth_mult)
-    #     args.width = int(16 * args.width_mult)
-    # elif args.arch == "conv_inv":
-    #     args.depth = int(3 * args.depth_mult)
-    #     args.width = int(16 * args.width_mult)
-    # elif args.arch == "resnet" or args.arch=="resnet18":
-    #     args.depth =  int(4 * args.depth_mult * 2)
-    # elif args.arch == "vit":
-    #     args.depth = int(2*3*args.depth_mult) # 2 --> one attention block, one MLP block, 3 --> base number of transformers blocks
-    # else:
-    #     raise ValueError()
-    args.width = get_width(args.arch, args.width_mult)
-    args.depth = get_depth(args.arch, args.depth_mult)
+    
+    if args.width <= 0:
+        args.width = get_width(args.arch, args.width_mult)
+    if args.arch != "simple_conv":
+        args.depth = get_depth(args.arch, args.depth_mult)
+    else:
+        args.depth = 3
     
     if args.res_scaling_type == 'none':
         args.res_scaling = 1.0
@@ -124,6 +117,8 @@ def get_model(arch, width, depth, args):
                       non_lin_first=True, sigma_last_layer_per_block=args.sigma_last_layer_per_block, init_stride=2,
                       depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
         
+    elif arch == "simple_conv" and args.dataset == "cifar10":
+        net = SimpleConvNet(width=width, gamma=args.gamma, gamma_zero=args.gamma_zero, num_classes=args.num_classes, base_width=args.base_width)
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 
     #                           res_scaling=args.res_scaling, depth_scale_first=args.depth_scale_first, norm=args.norm)
