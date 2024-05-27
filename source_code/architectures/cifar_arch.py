@@ -6,7 +6,7 @@ import math
  # TODO: handle bias weights
     
 class BlockLayer(nn.Module):
-    def __init__(self, fan_in, fan_out, norm, kernel_size=3, stride=1, non_lin_first=True, nonlinearity='relu', sigma_init=1.0, bias=None, learnable=True, base_width=1.0):
+    def __init__(self, fan_in, fan_out, norm, kernel_size=3, stride=1, non_lin_first=True, nonlinearity='relu', sigma_init=1.0, bias=None, learnable=True):
         super().__init__()
         if nonlinearity == 'relu':
             nonlin = nn.ReLU()
@@ -14,7 +14,7 @@ class BlockLayer(nn.Module):
             raise ValueError()
         self.sigma_init = sigma_init
         
-        conv = ScaledLayer(nn.Conv2d(fan_in, fan_out, kernel_size=kernel_size, stride=stride, padding=1, bias=bias), sigma_init=self.sigma_init, requires_grad=learnable, base_width=base_width, nonlinearity=nonlinearity)
+        conv = ScaledLayer(nn.Conv2d(fan_in, fan_out, kernel_size=kernel_size, stride=stride, padding=1, bias=bias), sigma_init=self.sigma_init, requires_grad=learnable, nonlinearity=nonlinearity)
         norm = get_norm_layer(fan_out, norm)
         self.non_lin_first = non_lin_first
         # TODO: check order of operations (especially normalization layers)
@@ -209,21 +209,21 @@ class ConvNet(nn.Module):
         
         depth_scale = 1.0 if not self.depth_scale_non_res_layers else math.sqrt(self.tot_n_blocks)
 
-        self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=init_stride, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
+        self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=init_stride, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale)
         
-        self.block1 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        self.block1 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
-        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
+        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale)
         
-        self.block2 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        self.block2 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
-        self.conv03 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale, base_width=base_width)
+        self.conv03 = ScaledLayer(nn.Conv2d(width, width, 3, 1, padding=1, bias=bias), depth_scale=1/depth_scale, sigma_init=depth_scale)
 
-        self.block3 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first, base_width=base_width), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
+        self.block3 = nn.ModuleList([ScaledResidualBranch(ResidualBranch(BlockLayer, width, width, n_layers=layers_per_block, sigma_init_last=sigma_last_layer_per_block, norm=norm, non_lin_first=non_lin_first), res_scaling=self.res_scaling) for _ in range(self.n_blocks)])
         
         final_size =  self.img_dim//(8*init_stride) 
         self.final_width = int(final_size**2 * width)
-        self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
+        self.gamma = math.sqrt(self.final_width / base_width) if gamma == "sqrt_width" else 1.0
         self.gamma = self.gamma * self.gamma_zero
         
         sigma_init = 0.0 if self.zero_init_readout else 1.0
@@ -274,14 +274,14 @@ class SimpleConvNet(nn.Module):
         self.zero_init_readout = zero_init_readout
 
         
-        self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=2, padding=1, bias=bias), sigma_init=sigma_init, base_width=base_width)
+        self.conv01 = ScaledLayer(nn.Conv2d(3, width, 3, stride=2, padding=1, bias=bias), sigma_init=sigma_init)
         self.act1 = nn.ReLU()
-        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, padding=1, bias=bias, stride=4), sigma_init=sigma_init, base_width=base_width)
+        self.conv02 = ScaledLayer(nn.Conv2d(width, width, 3, padding=1, bias=bias, stride=4), sigma_init=sigma_init)
         self.act2 = nn.ReLU()
         
         final_size =  self.img_dim//32
         self.final_width = int(final_size**2 * width)
-        self.gamma = math.sqrt(self.final_width) if gamma == "sqrt_width" else 1.0
+        self.gamma = math.sqrt(self.final_width/base_width) if gamma == "sqrt_width" else 1.0
         self.gamma = self.gamma * self.gamma_zero
         
         sigma_init = 0.0 if self.zero_init_readout else 1.0
