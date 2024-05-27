@@ -40,6 +40,7 @@ def set_parametr_args(parametr, args=None):
     elif parametr == 'mup_sqrt_depth':
         d["res_scaling_type"] = 'sqrt_depth'
         d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
+        # d["depth_scale_lr"] = 'none' # CHANGE THIS ALEX
         d["depth_scale_non_res_layers"] = False
         d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
         d["gamma"] = 'sqrt_width'

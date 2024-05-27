@@ -254,7 +254,7 @@ if __name__ == '__main__':
                                     
                                     # Get a large batch for hessian evaluations
                                     b_size = args.batch_size
-                                    args.batch_size = 1024
+                                    args.batch_size = 1024 
                                     trainloader, testloader = load_data(args, generator=g, seed_worker=seed_worker)
                                     inputs, targets = next(iter(trainloader))
                                     first_inputs, first_targets = torch.clone(inputs), torch.clone(targets)
@@ -376,8 +376,7 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp,
-                                                                    top_hessian_eigvals=args.top_hessian_eigvals)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, top_hessian_eigvals=args.top_hessian_eigvals, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
