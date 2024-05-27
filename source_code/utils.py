@@ -149,12 +149,21 @@ def get_model(arch, width, depth, args):
 
 
 def get_lr(net, args):
-    lr = args.lr * args.gamma_zero**2 * net.gamma**2
+    lr = args.lr * net.gamma**2
     if args.depth_scale_lr == "one_sqrt_depth":
         lr = lr / np.sqrt(args.depth)
     elif args.depth_scale_lr == "depth":
         lr = lr * args.depth
     return lr
+
+
+def rescale_qty_because_of_lr(qty, net, args):
+    qty = qty / net.gamma**2
+    if args.depth_scale_lr == "one_sqrt_depth":
+        qty = qty * np.sqrt(args.depth)
+    elif args.depth_scale_lr == "depth":
+        qty = qty / args.depth
+    return qty
     
     
 def get_optimizers(nets, args):
@@ -162,8 +171,8 @@ def get_optimizers(nets, args):
     if args.optimizer == 'musgd':
 
         optimizers = [ optim.SGD(net.parameters(), lr=get_lr(net, args),
-                            momentum=args.momentum,
-                            weight_decay=args.weight_decay) for net in nets ]
+                            momentum=rescale_qty_because_of_lr(args.momentum, net, args),
+                            weight_decay=rescale_qty_because_of_lr(args.weight_decay, net, args)) for net in nets ]
         
         # optimizers = [ MuSGD(net.parameters(), lr=args.lr,
         #                     momentum=args.momentum,
