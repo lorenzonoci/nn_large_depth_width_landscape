@@ -12,14 +12,18 @@ import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
 from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness
 import json
+import time
+
+# Get the current timestamp as a float
+timestamp = time.time()
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}/width_{}".format(
+    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/norm_{}/k_layers_{}/width_{}/timestamp_{}".format(
         args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width)
+        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width, timestamp)
     
 if __name__ == '__main__':
 
@@ -115,8 +119,9 @@ if __name__ == '__main__':
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[8:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        #lrs = np.logspace(-2.5, 1.5, num=19)[8:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[1:3] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-1, 0.1, num=10)
         c += 1
     else:
         lrs = [args.lr]
@@ -154,7 +159,7 @@ if __name__ == '__main__':
         lambdas = [args.weight_decay]
         
     if args.seed == -1:
-        seeds = [1,2,3,4]
+        seeds = [1,2,3,4,5]
     else:
         seeds = [args.seed]
     
@@ -371,7 +376,8 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp,
+                                                                    top_hessian_eigvals=args.top_hessian_eigvals)
                                         metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')

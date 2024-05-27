@@ -117,7 +117,7 @@ def get_model(arch, width, depth, args):
                       depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
         
     elif arch == "simple_conv" and args.dataset == "cifar10":
-        net = SimpleConvNet(width=width, gamma=args.gamma, gamma_zero=args.gamma_zero, num_classes=args.num_classes, base_width=args.base_width)
+        net = SimpleConvNet(width=width, gamma=args.gamma, gamma_zero=args.gamma_zero, num_classes=args.num_classes, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 
     #                           res_scaling=args.res_scaling, depth_scale_first=args.depth_scale_first, norm=args.norm)
