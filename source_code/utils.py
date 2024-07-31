@@ -118,7 +118,7 @@ def get_model(arch, width, depth, args):
                       depth_scale_non_res_layers=args.depth_scale_non_res_layers, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
         
     elif arch == "simple_conv" and args.dataset == "cifar10":
-        net = SimpleConvNet(width=width, gamma=args.gamma, gamma_zero=args.gamma_zero, num_classes=args.num_classes, base_width=args.base_width)
+        net = SimpleConvNet(width=width, gamma=args.gamma, gamma_zero=args.gamma_zero, num_classes=args.num_classes, base_width=args.base_width, zero_init_readout=args.zero_init_readout)
     # elif arch == "resnet" and args.dataset == "cifar10":
     #     net = resnet.Resnet10(num_classes=10, feat_scale=1, wm=width_mult, depth_mult=depth_mult, gamma=args.gamma, 
     #                           res_scaling=args.res_scaling, depth_scale_first=args.depth_scale_first, norm=args.norm)
@@ -149,12 +149,21 @@ def get_model(arch, width, depth, args):
 
 
 def get_lr(net, args):
-    lr = args.lr * args.gamma_zero**2 * net.gamma**2
+    lr = args.lr * net.gamma**2
     if args.depth_scale_lr == "one_sqrt_depth":
         lr = lr / np.sqrt(args.depth)
     elif args.depth_scale_lr == "depth":
         lr = lr * args.depth
     return lr
+
+
+def rescale_qty_because_of_lr(qty, net, args):
+    qty = qty / net.gamma**2
+    if args.depth_scale_lr == "one_sqrt_depth":
+        qty = qty * np.sqrt(args.depth)
+    elif args.depth_scale_lr == "depth":
+        qty = qty / args.depth
+    return qty
     
     
 def get_optimizers(nets, args):
@@ -162,8 +171,8 @@ def get_optimizers(nets, args):
     if args.optimizer == 'musgd':
 
         optimizers = [ optim.SGD(net.parameters(), lr=get_lr(net, args),
-                            momentum=args.momentum,
-                            weight_decay=args.weight_decay) for net in nets ]
+                            momentum=rescale_qty_because_of_lr(args.momentum, net, args),
+                            weight_decay=rescale_qty_because_of_lr(args.weight_decay, net, args)) for net in nets ]
         
         # optimizers = [ MuSGD(net.parameters(), lr=args.lr,
         #                     momentum=args.momentum,

@@ -12,14 +12,18 @@ import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
 from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, ntk_eigenvalues
 import json
+import time
+
+# Get the current timestamp as a float
+timestamp = time.time()
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/parametr_{}/epoch_{}/lr_{:.6f}/seed_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/norm_{}/k_layers_{}/width_{}".format(
-        args.arch, args.optimizer, args.parametr, args.epochs, args.lr, args.seed, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.norm, args.layers_per_block, args.width)
+    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/norm_{}/k_layers_{}/width_{}/timestamp_{}".format(
+        args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
+        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width, timestamp)
     
 if __name__ == '__main__':
 
@@ -116,8 +120,9 @@ if __name__ == '__main__':
     #     681.292069, 1000., 1467.799268, 2154.43469 , 3162.27766 ,
     #    4641.588834][3:8] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(-6.5, -2.5, num=19)[-2:-1] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
-        lrs = np.logspace(-2.5, 1.5, num=19)[8:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        #lrs = np.logspace(-2.5, 1.5, num=19)[8:16].tolist() #if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
         #lrs = np.logspace(1.5, 5.5, num=19)[1:3] if "adam" not in args.optimizer else np.logspace(-4, -2, num=10)
+        lrs = np.logspace(-1, 0.1, num=10)
         c += 1
     else:
         lrs = [args.lr]
@@ -155,7 +160,7 @@ if __name__ == '__main__':
         lambdas = [args.weight_decay]
         
     if args.seed == -1:
-        seeds = [1,2,3,4]
+        seeds = [1,2,3,4,5]
     else:
         seeds = [args.seed]
     
