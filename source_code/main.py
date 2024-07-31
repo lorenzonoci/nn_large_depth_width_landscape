@@ -10,16 +10,16 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, ntk_eigenvalues
 import json
 
 wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/momentum_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/weight_decay_{}/norm_{}/k_layers_{}/width_{}".format(
-        args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width)
+    return "model_{}/optimizer{}/parametr_{}/epoch_{}/lr_{:.6f}/seed_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/norm_{}/k_layers_{}/width_{}".format(
+        args.arch, args.optimizer, args.parametr, args.epochs, args.lr, args.seed, args.res_scaling_type, args.width_mult, args.depth_mult,
+        args.skip_scaling, args.beta, args.gamma_zero, args.norm, args.layers_per_block, args.width)
     
 if __name__ == '__main__':
 
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
+    parser.add_argument('--ntk_eigs', type=int, default=0)
     parser.add_argument('--top_hessian_eigvals', type=int, default=1)
     parser.add_argument('--get_top_k_dir_sharp', action='store_true')
     parser.add_argument('--width', type=int, default=-1)
@@ -339,27 +340,27 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp, top_hessian_eigvals=args.top_hessian_eigvals)
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp, top_hessian_eigvals=args.top_hessian_eigvals, ntk_eigs=args.ntk_eigs)
                                     
                                     nets[0].eval()
                                     
                                     if args.eval_hessian:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, top_n=args.top_hessian_eigvals, cuda=True)
                                         metrics["trace"] += [np.mean(trace)]
-                                        if args.top_hessian_eigvals == 1:
-                                            metrics["top_eig"] += [top_eigenvalues[-1]]
-                                        else:
-                                            for i in range(args.top_hessian_eigvals):
-                                                metrics[f"top_eig_{i}"] += [top_eigenvalues[i]] 
+                                        for i in range(args.top_hessian_eigvals):
+                                            metrics[f"top_eig_{i}"] += [top_eigenvalues[i]] 
                                     if args.top_eig_ggn:
                                         top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], first_inputs, first_targets, args.use_mse_loss)
                                         metrics["top_eig_ggn"] += [top_eig_ggn]
                                         metrics["residual"] += [residual]
-                                        
                                     if args.eval_hessian_random_features:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, first_inputs, first_targets, cuda=True)
                                         metrics["trace_rf"] += [np.mean(trace)]
                                         metrics["top_eig_rf"] += [top_eigenvalues[-1]]
+                                    if args.ntk_eigs > 0:
+                                        top_ntk_eigs = ntk_eigenvalues(nets[0], first_inputs, first_targets, args.ntk_eigs)
+                                        for i in range(args.ntk_eigs):
+                                            metrics[f"ntk_eig_{i}"] += [top_ntk_eigs[i].item()]
                                         
                                     # if args.get_top_k_dir_sharp:
                                     #     gs = get_gradients(nets[0])
@@ -371,8 +372,8 @@ if __name__ == '__main__':
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
                                         metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, top_hessian_eigvals=args.top_hessian_eigvals, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp)
-                                        metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, top_hessian_eigvals=args.top_hessian_eigvals, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp, ntk_eigs=args.ntk_eigs)
+                                        # metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
                                         
                                         print('Saving..')
                                         state = {

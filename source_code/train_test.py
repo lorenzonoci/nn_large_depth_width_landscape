@@ -2,7 +2,7 @@ import wandb
 import torch
 import sys
 from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, top_k_dir_sharpness, top_k_hessian_alignment, process_gradients, get_projected_gradients, process_eigenvectors
-from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict, directional_sharpness
+from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict, directional_sharpness, ntk_eigenvalues
 from pyhessian import hessian
 import numpy as np
 from asdl.kernel import kernel_eigenvalues
@@ -10,7 +10,7 @@ from pyhessian import get_params_grad, hessian_vector_product, normalization, gr
 
 # Training
 def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False, top_hessian_eigvals=10):
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False, top_hessian_eigvals=10, ntk_eigs=0):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -106,15 +106,16 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             if eval_hessian:
                 top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, eval_inputs, eval_targets, top_n=top_hessian_eigvals, cuda=True)
                 metrics["trace"] += [np.mean(trace)]
-                if top_hessian_eigvals == 1:
-                    metrics["top_eig"] += [top_eigenvalues[-1]]
-                else:
-                    for i in range(top_hessian_eigvals):
-                        metrics[f"top_eig_{i}"] += [top_eigenvalues[i]]
+                for i in range(top_hessian_eigvals):
+                    metrics[f"top_eig_{i}"] += [top_eigenvalues[i]]
             if top_eig_ggn:
                 top_eig_ggn, residual = residual_and_top_eig_ggn(nets[0], eval_inputs, eval_targets, use_mse_loss)
                 metrics['residual'] += [residual]
                 metrics['top_eig_ggn'] += [top_eig_ggn]
+            if ntk_eigs > 0:
+                top_ntk_eigs = ntk_eigenvalues(nets[0], eval_inputs, eval_targets, ntk_eigs)
+                for i in range(ntk_eigs):
+                    metrics[f"ntk_eig_{i}"] += [top_ntk_eigs[i].item()] 
                 
             #metrics["ntk_trace"] += [empirical_ntk_jacobian_contraction(nets[0], fnet_single, eval_inputs, eval_targets)]
             

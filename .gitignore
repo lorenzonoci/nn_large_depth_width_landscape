@@ -3,3 +3,7 @@ runs/
 __pycache__/
 data/
 test/
+*.pdf
+cifar-10-batches-py/
+cifar-10-python.tar.gz
+subsampled_cifar10_train/

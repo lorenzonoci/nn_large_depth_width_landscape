@@ -6,18 +6,20 @@ import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from torch.nn.functional import one_hot
 
-def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False, top_hessian_eigvals=1):
+def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False, top_hessian_eigvals=1, ntk_eigs=0):
     metrics = []
     metrics_dict = {}
     c = False
     if hessian:
         metrics.extend(['trace'])
-        if top_hessian_eigvals == 1:
-            metrics.extend(["top_eig"])
-        else:
-            for i in range(top_hessian_eigvals):
-                metrics.extend([f"top_eig_{i}"]) 
+        for i in range(top_hessian_eigvals):
+            metrics.extend([f"top_eig_{i}"]) 
         c = True
+    if ntk_eigs > 0:
+        for i in range(ntk_eigs):
+            metrics.extend([f"ntk_eig_{i}"])
+        c = True
+    
     if hessian_rf:
         metrics.extend(["trace_rf", "top_eig_rf"])
         c = True  
@@ -241,6 +243,13 @@ def directional_sharpness(gradients, model, inputs):
     dir_sharpnes = gradients @ Hg
 
     return dir_sharpnes
+
+def ntk_eigenvalues(model, inputs, targets, num_eigs): 
+    inputs = inputs.cuda()
+    targets = targets.cuda()
+    # very important: cross_entropy always set to FALSE!
+    ntk_eigenvalues = kernel_eigenvalues(model, inputs, cross_entropy=False, print_progress=False, top_n=num_eigs)
+    return ntk_eigenvalues
 
 def hessian_trace_and_top_eig_rf(model, criterion, inputs, targets, cuda=True):
     for name, param in model.named_parameters():
