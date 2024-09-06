@@ -32,9 +32,15 @@ def set_parametr_args(parametr, args=None):
         
     elif parametr == 'mup':
         d["res_scaling_type"] = 'none'
-        d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none'
+        d["depth_scale_lr"] = 'one_sqrt_depth' if "adam" in args.optimizer else 'none' # this is fine i think
         d["depth_scale_non_res_layers"] = False
-        d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
+        if 'adamw' in args.optimizer:
+            d["optimizer"] = 'muadamw'
+        elif 'adam' in args.optimizer:
+            d["optimizer"] = 'muadam'
+        else:
+            d["optimizer"] = 'musgd'
+        # d["optimizer"] = 'muadam' if 'adam' in args.optimizer else 'musgd'
         d["gamma"] = 'sqrt_width'
         
     elif parametr == 'mup_sqrt_depth':
@@ -169,17 +175,12 @@ def rescale_qty_because_of_lr(qty, net, args):
 def get_optimizers(nets, args):
     
     if args.optimizer == 'musgd':
-
         optimizers = [ optim.SGD(net.parameters(), lr=get_lr(net, args),
                             momentum=rescale_qty_because_of_lr(args.momentum, net, args),
                             weight_decay=rescale_qty_because_of_lr(args.weight_decay, net, args)) for net in nets ]
-        
-        # optimizers = [ MuSGD(net.parameters(), lr=args.lr,
-        #                     momentum=args.momentum,
-        #                     weight_decay=args.weight_decay) for net in nets ]
-    # elif args.optimizer == 'muadam':
-    #     optimizers = [ MuAdam(net.parameters(), lr=args.lr) for net in nets ]
-        
+    elif args.optimizer == 'muadamw':
+        # optimizers = [optim.AdamW(net.parameters(), lr=get_lr(net, args), weight_decay=args.weight_decay/get_lr(net, args)) for net in nets]
+        optimizers = [optim.AdamW(net.parameters(), lr=get_lr(net, args), weight_decay=args.weight_decay) for net in nets]
     elif args.optimizer == 'sgd':
         optimizers = [optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay) for net in nets]
     elif args.optimizer == 'muadam':

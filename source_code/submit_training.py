@@ -4,20 +4,20 @@ from pycondor.pycondor import *
 import numpy as np
 
 if __name__ == '__main__':
-    seeds = [0, 5]
-    # lrs = np.logspace(-1, 1.5, num=12) #sgd
+    seeds = [0, 1]
+    # lrs = np.logspace(-2, 0.5, num=16) #sgd
+    # lrs = np.logspace(-1, 0, num=14) #sgd
+    lrs = np.logspace(-1, 0, num=15)[4:10]
     # lrs = np.logspace(-1, 1, num=18)[0:-3]
 #    lrs = np.logspace(-1, 1.5, num=24)[:-9]
     # lrs = np.logspace(1.5, 4.0, num=24)[:10]
-    lrs = np.array([0.7])
-    print(lrs)
     # lrs = np.logspace(-3, -1, num=12) #adam with scaling
-    # lrs = np.logspace(-4, -2, num=12) # adam without scaling
-
+    # lrs = np.logspace(-5, -2.5, num=15) # adam without scaling
     # over width
     #depth_mults = [64, 32, 16, 8, 4, 2, 1]
     depth_mults = [1]
-    width_mults = [1, 2, 4, 8, 16, 32]
+    width_mults = [1, 2, 4, 8, 16]
+    # width_mults = [4]
     layers_per_blocks = [1]
     params = ['mup']
     for run in itertools.product(*[width_mults, depth_mults, seeds, lrs, params, layers_per_blocks]):

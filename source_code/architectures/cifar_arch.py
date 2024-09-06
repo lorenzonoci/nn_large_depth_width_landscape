@@ -263,7 +263,6 @@ class ConvNet(nn.Module):
     
     
     
-    
 class SimpleConvNet(nn.Module):
     def __init__(self, width, gamma_zero=1, num_classes=10, img_dim=32, zero_init_readout=False,  gamma='sqrt_width', bias=None, base_width=1.0, sigma_init=1):
         super().__init__()

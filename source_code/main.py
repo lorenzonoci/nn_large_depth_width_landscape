@@ -10,7 +10,7 @@ from train_test import train, test
 from functools import partial
 import transformers
 from test_parametr import parametr_check_width, parametr_check_depth, parametr_check_pl, parametr_check_weight_space
-from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, ntk_eigenvalues
+from metrics import register_activation_hooks, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, get_metrics_dict, residual_and_top_eig_ggn, top_k_dir_sharpness, ntk_eigenvalues, directional_sharpness, hessian_spectrum
 import json
 import time
 
@@ -21,9 +21,9 @@ wandb_project_name = 'mse large batch'
 wand_db_team_name = "large_depth_team"
 
 def get_run_name(args):
-    return "model_{}/optimizer{}/parametr_{}/dataset_{}/epoch_{}/lr_{:.6f}/seed_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/norm_{}/k_layers_{}/width_{}/timestamp_{}".format(
-        args.arch, args.optimizer, args.parametr, args.dataset, args.epochs, args.lr, args.seed, args.momentum, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
-        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width, timestamp)
+    return "model_{}/optimizer{}/epoch_{}/lr_{:.6f}/seed_{}/batch_size_{}/res_scaling_{}/width_mult_{}/depth_mult_{}/skip_scaling_{}/beta_{}/gamma_zero_{}/wd_{}/norm_{}/k_layers_{}/width_{}".format(
+        args.arch, args.optimizer, args.epochs, args.lr, args.seed, args.batch_size, args.res_scaling_type, args.width_mult, args.depth_mult,
+        args.skip_scaling, args.beta, args.gamma_zero, args.weight_decay, args.norm, args.layers_per_block, args.width)
     
 if __name__ == '__main__':
 
@@ -46,13 +46,13 @@ if __name__ == '__main__':
                         ''')
     parser.add_argument('--lr', default=1.0, type=float, help='learning rate')
     parser.add_argument('--arch', type=str, default='conv')
-    parser.add_argument('--optimizer', default='musgd', choices=['sgd', 'adam', 'musgd', 'muadam'])
+    parser.add_argument('--optimizer', default='musgd', choices=['sgd', 'adam', 'musgd', 'muadam', 'muadamw'])
     parser.add_argument('--epochs', type=int, default=21)
     parser.add_argument('--width_mult', type=float, default=2.0)
     parser.add_argument('--save_dir', type=str, default='test/',
                     help='file location to save results')
     parser.add_argument('--res_scaling_type', type=str, default='none')
-    parser.add_argument('--data_path', type=str, default='./')
+    parser.add_argument('--data_path', type=str, default='/is/cluster/fast/ameterez/datasets')
     parser.add_argument('--dataset', type=str, default='cifar10')
     parser.add_argument('--depth_mult', type=int, default=1)
     parser.add_argument('--skip_scaling', type=float, default=1,
@@ -103,6 +103,8 @@ if __name__ == '__main__':
     parser.add_argument('--eval_hessian_random_features', action='store_true')
     parser.add_argument('--save_ckpt_every_nth_epoch', type=int, default=-1)
     parser.add_argument('--eval_hessian',  action='store_true')
+    parser.add_argument('--eval_hessian_spectrum',  action='store_true')
+    parser.add_argument('--eval_dir_sharpness',  action='store_true')
     parser.add_argument('--top_eig_ggn', action='store_true')
     parser.add_argument('--ntk_eigs', type=int, default=0)
     parser.add_argument('--top_hessian_eigvals', type=int, default=1)
@@ -345,10 +347,22 @@ if __name__ == '__main__':
                                     else:
                                         schedulers = []
 
-                                    metrics = get_metrics_dict(hessian=args.eval_hessian, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp, top_hessian_eigvals=args.top_hessian_eigvals, ntk_eigs=args.ntk_eigs)
-                                    
+                                    metrics = get_metrics_dict(hessian=args.eval_hessian, eval_dir_sharpness=args.eval_dir_sharpness, hessian_rf=args.eval_hessian_random_features, top_eig_ggn=args.top_eig_ggn, top_k_dir_sharp=args.get_top_k_dir_sharp, top_hessian_eigvals=args.top_hessian_eigvals, ntk_eigs=args.ntk_eigs)
+                                    densities = {
+                                        'density_eigen': [],
+                                        'density_weight': []
+                                    }
                                     nets[0].eval()
-                                    
+                                    if args.eval_hessian_spectrum:
+                                        density_eigen, density_weight = hessian_spectrum(nets[0],  criterion, first_inputs, first_targets, cuda=True)
+                                        densities['density_eigen'] += density_eigen
+                                        densities['density_weight'] += density_weight
+                                    if args.eval_dir_sharpness:
+                                        # import pdb
+                                        # pdb.set_trace()
+                                        dir_sharpness, normalized_dir_sharpness = directional_sharpness(nets[0], first_inputs, first_targets, criterion, return_normalized=True)
+                                        metrics["directional_sharpness"] += [dir_sharpness] 
+                                        metrics["normalized_directional_sharpness"] += [normalized_dir_sharpness] 
                                     if args.eval_hessian:
                                         top_eigenvalues, trace = hessian_trace_and_top_eig(nets[0], criterion, first_inputs, first_targets, top_n=args.top_hessian_eigvals, cuda=True)
                                         metrics["trace"] += [np.mean(trace)]
@@ -375,16 +389,21 @@ if __name__ == '__main__':
                                     #exit()
                                     batches_seen = 0
                                     for epoch in range(start_epoch, start_epoch+args.epochs):
-                                        metrics, batches_seen = train(epoch,batches_seen,nets,metrics, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
+                                        densities, metrics, batches_seen = train(epoch,batches_seen,nets,metrics, densities, args.num_classes, trainloader, optimizers, criterion, device, schedulers, log=args.wandb, max_updates=max_updates, 
                                                                     activations=activations, get_entropies=True, logging_steps=args.logging_steps, use_mse_loss=args.use_mse_loss, eval_inputs=first_inputs, eval_targets=first_targets,
-                                                                    eval_hessian_random_features=args.eval_hessian_random_features, top_hessian_eigvals=args.top_hessian_eigvals, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp, ntk_eigs=args.ntk_eigs)
+                                                                    eval_hessian_random_features=args.eval_hessian_random_features, eval_dir_sharpness=args.eval_dir_sharpness, top_hessian_eigvals=args.top_hessian_eigvals, eval_hessian=args.eval_hessian, top_eig_ggn=args.top_eig_ggn, get_top_k_dir_sharpness=args.get_top_k_dir_sharp, ntk_eigs=args.ntk_eigs, 
+                                                                    eval_hessian_spectrum=args.eval_hessian_spectrum)
                                         # metrics = test(nets, metrics, args.num_classes, testloader, criterion, device, args.use_mse_loss)
-                                        
+                                        from pprint import pprint
+                                        # pprint(metrics, indent=4)
                                         print('Saving..')
                                         state = {
                                             'metrics': metrics,
+                                            'densities': densities,
                                             'epoch': epoch
                                         }
+
+                                        pprint(state)
                                         if not os.path.isdir(args.save_path):
                                             os.mkdir(args.save_path)
                                         torch.save(state, args.save_path + f'/ckpt_N_{args.width_mult}_batches_{epoch}_.pth')    

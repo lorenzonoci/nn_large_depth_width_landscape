@@ -2,15 +2,16 @@ import wandb
 import torch
 import sys
 from metrics import gradient_norm, hessian_trace_and_top_eig, hessian_trace_and_top_eig_rf, residual_and_top_eig_ggn, top_k_dir_sharpness, top_k_hessian_alignment, process_gradients, get_projected_gradients, process_eigenvectors
-from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict, directional_sharpness, ntk_eigenvalues
+from metrics import activation_norm_dict, entropies_dict, empirical_ntk_jacobian_contraction, fnet_single, activ_skewness_dict, directional_sharpness, ntk_eigenvalues, hessian_spectrum
 from pyhessian import hessian
 import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from pyhessian import get_params_grad, hessian_vector_product, normalization, group_product
 
 # Training
-def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
-          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False, top_hessian_eigvals=10, ntk_eigs=0):
+def train(epoch, batches_seen, nets, metrics, densities, num_classes, trainloader, optimizers, criterion, device, schedulers, log=True, max_updates=-1, activations=None, get_entropies=False, logging_steps=200, use_mse_loss=False,
+          eval_inputs=None, eval_targets=None, eval_hessian_random_features=False, eval_hessian=False, top_eig_ggn=False, get_top_k_dir_sharpness=False, top_hessian_eigvals=10, ntk_eigs=0, eval_dir_sharpness=False, 
+          eval_hessian_spectrum=False):
     
     print('\nEpoch: %d' % epoch)
     for e, net in enumerate(nets):
@@ -74,31 +75,14 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
 
             optimizers[0].zero_grad()
             nets[0].eval()
-            
-            if get_top_k_dir_sharpness:
-                # ks = [1, 2, 4, 6, 8, 10]
-                # kmax = max(ks)
-                hessian_comp = hessian(nets[0], criterion, data=(eval_inputs, eval_targets), cuda=True)
-                # gs = process_gradients(hessian_comp.gradsH)
-                # top_eigenvalues, top_eigenvectors = hessian_comp.eigenvalues(top_n=kmax, maxIter=1000, tol=1e-5) 
-                # top_eigenvectors = process_eigenvectors(top_eigenvectors)
-                # proj_g = get_projected_gradients(gs, top_eigenvectors)
-                # for k in ks:
-                #     s = top_k_dir_sharpness(proj_g, gs, k, top_eigenvalues)
-                #     s1 = top_k_hessian_alignment(proj_g, gs, k)
-                #     # metrics[f'top_{k}_dir_sharp'] += [s]
-                #     metrics[f'top_{k}_hessian_alignment'] += [s1]
-                #     #print(f"{k} dir sharp: {s}")
-                #     # print(f"{k} alignment {s1}")
-                # import pdb
-                # pdb.set_trace()
-                params, grads = get_params_grad(nets[0])
-                grads = normalization(grads)
-                Hv = hessian_vector_product(grads, params, grads)
-                vHv = group_product(grads, Hv)
-                metrics['directional_sharpness'] += [vHv.item()]
-                print(metrics['directional_sharpness'])
-           
+            if eval_hessian_spectrum:
+                density_eigen, density_weight = hessian_spectrum(nets[0],  criterion, eval_inputs, eval_targets, cuda=True)
+                densities["density_eigen"] += density_eigen
+                densities["density_weight"] += density_weight 
+            if eval_dir_sharpness:
+                dir_sharpness, normalized_dir_sharpness = directional_sharpness(nets[0], eval_inputs, eval_targets, criterion, return_normalized=True)
+                metrics["directional_sharpness"] += [dir_sharpness]
+                metrics["normalized_directional_sharpness"] += [normalized_dir_sharpness]
             if eval_hessian_random_features:
                 top_eigenvalues, trace = hessian_trace_and_top_eig_rf(nets[0], criterion, eval_inputs, eval_targets, cuda=True)
                 metrics["trace_rf"] += [np.mean(trace)]
@@ -172,7 +156,7 @@ def train(epoch, batches_seen, nets, metrics, num_classes, trainloader, optimize
             for scheduler in schedulers:
                 scheduler.step()
         
-    return metrics, batches_seen
+    return densities, metrics, batches_seen
 
 
 def test(nets, metrics, num_classes, testloader, criterion, device, use_mse_loss):

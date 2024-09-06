@@ -1,12 +1,13 @@
 import torch
 import re
 from torch.func import functional_call, vmap, jacrev
-from pyhessian import hessian
+from pyhessian import hessian, group_product
+from pyhessian.utils import group_divide
 import numpy as np
 from asdl.kernel import kernel_eigenvalues
 from torch.nn.functional import one_hot
 
-def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir_sharp=False, top_hessian_eigvals=1, ntk_eigs=0):
+def get_metrics_dict(hessian=True, hessian_rf=True, eval_dir_sharpness=False, top_eig_ggn=False, top_k_dir_sharp=False, top_hessian_eigvals=1, ntk_eigs=0):
     metrics = []
     metrics_dict = {}
     c = False
@@ -26,11 +27,15 @@ def get_metrics_dict(hessian=True, hessian_rf=True, top_eig_ggn=False, top_k_dir
     if top_eig_ggn:
         metrics.extend(["top_eig_ggn", "residual"])
         c = True
-    if top_k_dir_sharp:
-        # ks = [1, 2, 4, 6, 8, 10]
-        # for k in ks:
-            # metrics.extend([f"top_{k}_dir_sharp"])
+    # if top_k_dir_sharp:
+    #     # ks = [1, 2, 4, 6, 8, 10]
+    #     # for k in ks:
+    #         # metrics.extend([f"top_{k}_dir_sharp"])
+    #     metrics.extend([f"directional_sharpness"])
+    #     c = True
+    if eval_dir_sharpness:
         metrics.extend([f"directional_sharpness"])
+        metrics.extend([f"normalized_directional_sharpness"])
         c = True
     metrics_loss = ['train_loss', 'ens_train_loss', 'test_loss', 'ens_test_loss']
     metrics_acc = ['test_acc', 'ens_test_acc', 'train_acc', 'ens_train_acc']
@@ -175,6 +180,11 @@ def hessian_trace_and_top_eig(model, criterion, inputs, targets, top_n=1, cuda=T
     trace = hessian_comp.trace()
     return top_eigenvalues, trace
 
+def hessian_spectrum(model, criterion, inputs, targets, cuda=True):
+    hessian_comp = hessian(model, criterion, data=(inputs, targets), cuda=cuda)
+    density_eigen, density_weight = hessian_comp.density()
+    return density_eigen, density_weight
+
 def residual_and_top_eig_ggn(model, inputs, targets, use_mse_loss):
     inputs = inputs.cuda()
     targets = targets.cuda()
@@ -232,17 +242,36 @@ def process_gradients(grads):
     grads = [g.flatten() for g in grads]
     return torch.cat(grads, dim=0)
 
-def directional_sharpness(gradients, model, inputs):
-    # import pdb
-    # pdb.set_trace()
-    # gradients = [g/g.norm() for g in gradients]
-    # gradients is num_layers tensors
+def directional_sharpness(model, inputs, targets, criterion, return_normalized=False):
+    inputs = inputs.cuda()
+    targets = targets.cuda()
 
-    # now do hvp
-    Hg = torch.autograd.functional.hvp(model, inputs, gradients)
-    dir_sharpnes = gradients @ Hg
+    # get grads and params
+    grads = []
+    params = []
+    model.zero_grad()
+    loss = criterion(model(inputs), targets)
+    loss.backward(create_graph=True)
+    for param in model.parameters():
+        if not param.requires_grad:
+            continue
+        params.append(param)
+        grads.append(0. if param.grad is None else param.grad + 0.)
 
-    return dir_sharpnes
+    
+    # now do product Hg
+    Hg = torch.autograd.grad(grads,
+                             params,
+                             grad_outputs=grads,
+                             only_inputs=True,
+                             retain_graph=False)
+
+    # now finally do ghg
+    gHg = group_product(Hg, grads).cpu().item()
+    if return_normalized:
+        gg = group_product(grads, grads).cpu().item()
+        return gHg, gHg / gg 
+    return gHg
 
 def ntk_eigenvalues(model, inputs, targets, num_eigs): 
     inputs = inputs.cuda()

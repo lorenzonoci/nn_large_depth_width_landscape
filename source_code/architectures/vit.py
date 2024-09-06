@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from torch.nn.init import constant_
 
-from mup import MuReadout
+# from mup import MuReadout
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from architectures.utils import MyIdentity
