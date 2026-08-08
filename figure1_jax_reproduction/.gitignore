@@ -1,0 +1,5 @@
+.cache/
+.jax_cache/
+__pycache__/
+cifar10_data/
+results_*/
